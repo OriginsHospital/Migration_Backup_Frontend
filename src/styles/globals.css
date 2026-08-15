@@ -1,0 +1,335 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  display: none;
+}
+
+/* :root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+} */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.main-container {
+  display: flex;
+}
+
+main {
+  /* padding: 10px; */
+  /* padding-left: 50px; */
+}
+
+.title {
+  font-size: 3rem;
+  display: grid;
+  place-items: center;
+}
+
+.top_section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 10px;
+}
+
+.logo {
+  font-size: 18px;
+  line-height: 0;
+}
+
+.bars {
+  width: 30px;
+}
+
+.hide {
+  display: none;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  height: 30px;
+  padding: 10px;
+}
+
+.search input {
+  border: none;
+  margin-left: 10px;
+  border-radius: 5px;
+  background: rgb(238, 238, 238);
+
+  color: white;
+}
+
+.routes {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: left;
+  gap: 5px;
+}
+
+.link {
+  display: flex;
+  color: white;
+  gap: 10px;
+
+  padding: 10px 15px;
+  border-right: 4px solid transparent;
+  transition: 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+}
+
+.link:hover {
+  /* border-right: 4px solid white; */
+  background: #d7e2f4;
+  color: #1d3c6e;
+  border-radius: 10px;
+  /* margin: 5px; */
+  /* opacity: 0.3; */
+  /* transition: 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045); */
+}
+
+.active {
+  border-right: 4px solid white;
+  background: rgb(45, 51, 89);
+}
+
+.link_text {
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.menu {
+  display: flex;
+  color: white;
+
+  padding: 15px 15px;
+  border-right: 4px solid transparent;
+  transition: 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+  justify-content: space-between;
+}
+
+.menu_item {
+  display: flex;
+  gap: 10px;
+}
+
+.menu:hover {
+  background: #d7e2f4;
+  color: #1d3c6e;
+  border-radius: 10px;
+}
+
+.menu_container {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu_container .link {
+  /* padding-left: 20px; */
+
+  text-align: right;
+  /* border-bottom: #fff 0.5px solid; */
+}
+
+.land-legal-service-footer {
+  width: 100%;
+  background-color: grey;
+  overflow: hidden;
+  position: fixed;
+  bottom: 0px;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  /* left: 0px; */
+  /* right: 0px; */
+}
+
+/* 
+.path-0 {
+  animation: pathAnim-0 4s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes pathAnim-0 {
+  0% {
+    d: path("M 0,600 L 0,150 C 80.25837320574166,126.08612440191388 160.51674641148333,102.17224880382776 248,90 C 335.4832535885167,77.82775119617224 430.1913875598085,77.39712918660285 547,98 C 663.8086124401915,118.60287081339715 802.7177033492825,160.23923444976077 893,174 C 983.2822966507175,187.76076555023923 1024.9377990430621,173.64593301435406 1108,165 C 1191.0622009569379,156.35406698564594 1315.531100478469,153.17703349282297 1440,150 L 1440,600 L 0,600 Z");
+  }
+
+  25% {
+    d: path("M 0,600 L 0,150 C 78.04784688995213,157.76076555023923 156.09569377990425,165.52153110047848 251,173 C 345.90430622009575,180.47846889952152 457.665071770335,187.67464114832535 562,199 C 666.334928229665,210.32535885167465 763.244019138756,225.7799043062201 873,206 C 982.755980861244,186.2200956937799 1105.358851674641,131.20574162679424 1202,116 C 1298.641148325359,100.79425837320575 1369.3205741626793,125.39712918660288 1440,150 L 1440,600 L 0,600 Z");
+  }
+
+  50% {
+    d: path("M 0,600 L 0,150 C 108.32535885167462,140.3062200956938 216.65071770334924,130.61244019138755 322,136 C 427.34928229665076,141.38755980861245 529.7224880382776,161.85645933014357 626,179 C 722.2775119617224,196.14354066985643 812.4593301435407,209.96172248803828 891,213 C 969.5406698564593,216.03827751196172 1036.44019138756,208.29665071770336 1126,196 C 1215.55980861244,183.70334928229664 1327.77990430622,166.85167464114832 1440,150 L 1440,600 L 0,600 Z");
+  }
+
+  75% {
+    d: path("M 0,600 L 0,150 C 92.95693779904306,153.7224880382775 185.91387559808612,157.44497607655504 291,173 C 396.0861244019139,188.55502392344496 513.3014354066986,215.9425837320574 602,195 C 690.6985645933014,174.0574162679426 750.8803827751196,104.7846889952153 853,107 C 955.1196172248804,109.2153110047847 1099.177033492823,182.91866028708134 1204,202 C 1308.822966507177,221.08133971291866 1374.4114832535884,185.54066985645932 1440,150 L 1440,600 L 0,600 Z");
+  }
+
+  100% {
+    d: path("M 0,600 L 0,150 C 80.25837320574166,126.08612440191388 160.51674641148333,102.17224880382776 248,90 C 335.4832535885167,77.82775119617224 430.1913875598085,77.39712918660285 547,98 C 663.8086124401915,118.60287081339715 802.7177033492825,160.23923444976077 893,174 C 983.2822966507175,187.76076555023923 1024.9377990430621,173.64593301435406 1108,165 C 1191.0622009569379,156.35406698564594 1315.531100478469,153.17703349282297 1440,150 L 1440,600 L 0,600 Z");
+  }
+}
+
+.path-1 {
+  animation: pathAnim-1 4s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes pathAnim-1 {
+  0% {
+    d: path("M 0,600 L 0,350 C 78.44019138755979,349.0622009569378 156.88038277511959,348.1244019138756 250,349 C 343.1196172248804,349.8755980861244 450.91866028708125,352.5645933014354 565,350 C 679.0813397129187,347.4354066985646 799.444976076555,339.61722488038276 890,330 C 980.555023923445,320.38277511961724 1041.3014354066986,308.9665071770335 1128,312 C 1214.6985645933014,315.0334928229665 1327.3492822966507,332.51674641148327 1440,350 L 1440,600 L 0,600 Z");
+  }
+
+  25% {
+    d: path("M 0,600 L 0,350 C 83.54066985645932,320.688995215311 167.08133971291863,291.377990430622 257,285 C 346.91866028708137,278.622009569378 443.21531100478467,295.17703349282294 543,306 C 642.7846889952153,316.82296650717706 746.0574162679427,321.9138755980862 845,338 C 943.9425837320573,354.0861244019138 1038.5550239234449,381.1674641148325 1137,385 C 1235.4449760765551,388.8325358851675 1337.7224880382776,369.4162679425838 1440,350 L 1440,600 L 0,600 Z");
+  }
+
+  50% {
+    d: path("M 0,600 L 0,350 C 114.38277511961724,391.1004784688995 228.76555023923447,432.20095693779905 327,411 C 425.23444976076553,389.79904306220095 507.32057416267935,306.29665071770336 599,283 C 690.6794258373207,259.70334928229664 791.952153110048,296.6124401913876 873,326 C 954.047846889952,355.3875598086124 1014.870813397129,377.2535885167464 1106,380 C 1197.129186602871,382.7464114832536 1318.5645933014355,366.3732057416268 1440,350 L 1440,600 L 0,600 Z");
+  }
+
+  75% {
+    d: path("M 0,600 L 0,350 C 89.46411483253587,339.4928229665072 178.92822966507174,328.9856459330144 271,335 C 363.07177033492826,341.0143540669856 457.7511961722488,363.55023923444975 563,380 C 668.2488038277512,396.44976076555025 784.0669856459331,406.8133971291866 870,405 C 955.9330143540669,403.1866028708134 1011.9808612440193,389.19617224880386 1102,378 C 1192.0191387559807,366.80382775119614 1316.0095693779904,358.4019138755981 1440,350 L 1440,600 L 0,600 Z");
+  }
+
+  100% {
+    d: path("M 0,600 L 0,350 C 78.44019138755979,349.0622009569378 156.88038277511959,348.1244019138756 250,349 C 343.1196172248804,349.8755980861244 450.91866028708125,352.5645933014354 565,350 C 679.0813397129187,347.4354066985646 799.444976076555,339.61722488038276 890,330 C 980.555023923445,320.38277511961724 1041.3014354066986,308.9665071770335 1128,312 C 1214.6985645933014,315.0334928229665 1327.3492822966507,332.51674641148327 1440,350 L 1440,600 L 0,600 Z");
+  }
+} */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #06aee9;
+  border-radius: 20px;
+}
+
+/*  Iframe View Invoice - Orders*/
+.zoom-out-iframe {
+  transform: scale(0.5);
+  transform-origin: top left;
+  width: 100vw !important;
+  height: 205% !important;
+  overflow: auto;
+}
+
+.zoom-out-iframe::-webkit-scrollbar {
+  width: 0px;
+}
+
+.zoom-out-iframe::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.zoom-out-iframe::-webkit-scrollbar-thumb {
+  background: #888;
+}
+
+.zoom-out-iframe::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.chart-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem 1.5rem;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chart-legend__column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chart-legend__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.chart-legend__indicator {
+  margin-top: 0.25rem;
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 0.125rem;
+  flex-shrink: 0;
+}
+
+.chart-legend__content {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+}
+
+.chart-legend__label {
+  font-size: 12px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.chart-legend__value {
+  font-size: 11px;
+  color: #666666;
+}
+
+@media (max-width: 768px) {
+  .chart-legend {
+    grid-template-columns: 1fr;
+    font-size: 11px;
+  }
+
+  .chart-legend__column {
+    gap: 0.4rem;
+  }
+
+  .chart-legend__label {
+    font-size: 11px;
+  }
+
+  .chart-legend__value {
+    font-size: 10.5px;
+  }
+}
