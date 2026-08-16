@@ -8,6 +8,7 @@ import { useRouter } from 'next/router'
 import { useSelector, useDispatch } from 'react-redux'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import Popover from '@mui/material/Popover'
+import ClickAwayListener from '@mui/material/ClickAwayListener'
 import PregnantWomanOutlinedIcon from '@mui/icons-material/PregnantWomanOutlined'
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
 import LocalHospitalOutlinedIcon from '@mui/icons-material/LocalHospitalOutlined'
@@ -100,6 +101,7 @@ function NavItem({
             {path ? (
               <Link
                 href={path}
+                onClick={handleClose}
                 className={`p-2 flex justify-center text-nowrap relative flex-1 before:absolute before:bottom-0 before:left-0 before:h-0 hover:before:h-full before:w-full before:transition-all before:duration-300 before:bg-primary/50 before:-z-10
                 ${router.pathname === path ? 'shadow bg-primary/50' : ''}`}
               >
@@ -169,6 +171,15 @@ function NavItem({
             onClose={handleClose}
             anchorEl={anchorEl}
             elevation={4}
+            disableScrollLock
+            disableAutoFocus
+            disableEnforceFocus
+            disableRestoreFocus
+            hideBackdrop
+            sx={{ pointerEvents: 'none' }}
+            PaperProps={{
+              sx: { pointerEvents: 'auto' },
+            }}
             anchorOrigin={{
               vertical: 'top',
               horizontal: 'right',
@@ -178,40 +189,32 @@ function NavItem({
               horizontal: 'left',
             }}
           >
-            {filteredSubRoutes.map((eachSubRouteObj, i) => {
-              // const userModule = user?.moduleList?.find(
-              //   eachModuleObj => eachModuleObj.enum == eachSubRouteObj.relatedModule,
-              // )
-              // console.log('module list', user.moduleList, userModule)
-              const NavOption = withPermission(
-                SubNavItem,
-                false,
-                eachSubRouteObj.relatedModule,
-                [ACCESS_TYPES.READ, ACCESS_TYPES.WRITE],
-              )
-              return (
-                <NavOption
-                  key={i + eachSubRouteObj.relatedModule}
-                  eachSubRouteObj={eachSubRouteObj}
-                  i={i}
-                  // <NavItem
-                  // key={eachSubRouteObj.name + i}
-                  // expanded={expanded}
-                  // clickedNavItem={clickedNavItem}
-                  // setClickedNavItem={setClickedNavItem}
-                  // icon={eachSubRouteObj.icon}
-                  // Iconn={eachSubRouteObj.Iconn}
-                  // name={eachSubRouteObj.name}
-                  // path={eachSubRouteObj.path}
-                  // subRoutes={eachSubRouteObj.subRoutes}
-                />
-              )
-            })}
+            <ClickAwayListener onClickAway={handleClose}>
+              <div>
+                {filteredSubRoutes.map((eachSubRouteObj, i) => {
+                  const NavOption = withPermission(
+                    SubNavItem,
+                    false,
+                    eachSubRouteObj.relatedModule,
+                    [ACCESS_TYPES.READ, ACCESS_TYPES.WRITE],
+                  )
+                  return (
+                    <NavOption
+                      key={i + eachSubRouteObj.relatedModule}
+                      eachSubRouteObj={eachSubRouteObj}
+                      i={i}
+                      onNavigate={handleClose}
+                    />
+                  )
+                })}
+              </div>
+            </ClickAwayListener>
           </Popover>
         </>
       ) : (
         <Link
           href={path}
+          onClick={handleClose}
           className={`p-2 flex justify-center text-nowrap relative before:absolute before:bottom-0 before:left-0 before:h-0 hover:before:h-full before:w-full before:transition-all before:duration-300 before:bg-primary/50 before:-z-10
           ${router.pathname.startsWith(path) ? 'shadow bg-primary/50' : ''}`}
         >
@@ -332,12 +335,19 @@ function LogoutNavButton({
     </>
   )
 }
-const SubNavItem = ({ eachSubRouteObj, i }) => {
+const SubNavItem = ({ eachSubRouteObj, i, onNavigate }) => {
+  const router = useRouter()
+
   return (
     <Link
       key={eachSubRouteObj.name + i}
       className={`py-2 pl-2.5 pr-4  flex gap-2 text-nowrap  hover:shadow`}
       href={eachSubRouteObj.path}
+      onClick={(e) => {
+        e.preventDefault()
+        onNavigate?.()
+        router.push(eachSubRouteObj.path)
+      }}
     >
       <span className="text-secondary font-semibold ">
         {eachSubRouteObj.name}
@@ -765,7 +775,7 @@ function SideNav(props) {
 
   return (
     <div
-      className={`h-screen z-20 left-0 top-0 flex flex-col gap-3 min-w-[12%] duration-[0.5s] overflow-x-hidden border-r-2 w-12`}
+      className={`relative z-30 h-screen left-0 top-0 flex flex-col gap-3 min-w-[12%] duration-[0.5s] overflow-x-hidden border-r-2 w-12 bg-white`}
     >
       {/* <button
         className={`${expanded ? 'w-[50px]' : 'w-full'} self-end transition-[width] duration-[0.5s]`}

@@ -53,9 +53,9 @@ export default function App({ Component, pageProps }) {
                   <Component key={router.asPath} {...pageProps} />
                 </PreLoginContainer>
               ) : (
-                <PageMiddleware key={router.pathname}>
+                <PageMiddleware>
                   <Header />
-                  <Component key={router.pathname} {...pageProps} />
+                  <Component key={router.asPath} {...pageProps} />
                 </PageMiddleware>
               )}
             </Loader>
