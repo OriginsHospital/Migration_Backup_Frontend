@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Box, Typography, Alert, CircularProgress, Button } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+} from '@mui/material'
 import FilteredDataGrid from '@/components/FilteredDataGrid'
 import {
-  getAllPatients,
+  getActiveIP,
   getIndentList,
-  getPharmacyMasterData,
+  getIndentPharmacyItems,
 } from '@/constants/apis'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
@@ -14,58 +23,73 @@ import { toast } from 'react-toastify'
 import { openModal, closeModal } from '@/redux/modalSlice'
 import Modal from '@/components/Modal'
 import AddIndentForm from '@/components/Indent/AddIndentForm'
-import { debounce } from 'lodash'
-import { API_ROUTES } from '@/constants/constants'
 
 const IndentPage = () => {
-  const user = useSelector(store => store.user)
+  const user = useSelector((store) => store.user)
   const dispatch = useDispatch()
-  const [searchText, setSearchText] = useState('')
-  const [isLoadingPatients, setIsLoadingPatients] = useState(false)
-  const [patientSuggestions, setPatientSuggestions] = useState([])
+  const branches = user?.branchDetails || []
+  const [selectedBranch, setSelectedBranch] = useState('')
 
-  const {
-    data: pharmacyItems,
-    isLoading: isLoadingPharmacyItems,
-    isError: isErrorPharmacyItems,
-  } = useQuery({
-    queryKey: ['pharmacyItems'],
+  useEffect(() => {
+    if (!branches?.length) return
+    if (!selectedBranch) {
+      setSelectedBranch(branches[0].id)
+    }
+  }, [branches, selectedBranch])
+
+  const { data: pharmacyItems, isLoading: isLoadingPharmacyItems } = useQuery({
+    queryKey: ['indentPharmacyItems', selectedBranch],
     queryFn: async () => {
-      const response = await getPharmacyMasterData(
+      const response = await getIndentPharmacyItems(
         user.accessToken,
-        API_ROUTES.GET_ALL_PHARMACY_ITEMS,
+        selectedBranch,
       )
       if (response.status === 200) {
         return response.data
       }
-      throw new Error('Failed to fetch pharmacy items')
+      throw new Error(response.message || 'Failed to fetch pharmacy items')
     },
+    enabled: Boolean(user?.accessToken && selectedBranch),
   })
 
-  // Debounced function to fetch patient suggestions
-  const debouncedGetPatientSuggestions = debounce(async searchText => {
-    try {
-      setIsLoadingPatients(true)
-      const response = await getAllPatients(user?.accessToken, searchText)
-      setPatientSuggestions(response.data || [])
-    } catch (error) {
-      console.error('Error fetching patient suggestions:', error)
-    } finally {
-      setIsLoadingPatients(false)
-    }
-  }, 300)
-  const { data: indentData, isLoading, error } = useQuery({
-    queryKey: ['indentList'],
+  const { data: activeIPData } = useQuery({
+    queryKey: ['activeIP', selectedBranch],
+    queryFn: () => getActiveIP(user.accessToken, selectedBranch),
+    enabled: Boolean(user?.accessToken && selectedBranch),
+  })
+
+  const ipPatients = (activeIPData?.data || []).map((row) => ({
+    id: row.patientId,
+    Name: row.patientName || row.Name || '-',
+    patientId: row.patientDisplayId,
+    roomCode: row.roomCode,
+    ipId: row.id,
+    ipStatus: 'Admitted',
+  }))
+
+  const {
+    data: indentData,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['indentList', selectedBranch],
     queryFn: async () => {
-      const response = await getIndentList(user?.accessToken)
+      const response = await getIndentList(user?.accessToken, selectedBranch)
       if (response.status === 200) {
         return response.data
-      } else {
-        toast.error(response.message, toastconfig)
-        throw new Error(response.message)
       }
+      toast.error(response.message, toastconfig)
+      throw new Error(response.message)
     },
+    enabled: Boolean(user?.accessToken && selectedBranch),
   })
+
+  const selectedBranchLabel =
+    branches.find((branch) => String(branch.id) === String(selectedBranch))
+      ?.branchCode ||
+    branches.find((branch) => String(branch.id) === String(selectedBranch))
+      ?.name ||
+    ''
 
   const columns = [
     {
@@ -93,6 +117,13 @@ const IndentPage = () => {
       headerAlign: 'center',
     },
     {
+      field: 'roomCode',
+      headerName: 'Room / Bed',
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+    },
+    {
       field: 'itemName',
       headerName: 'Item Name',
       width: 200,
@@ -116,7 +147,7 @@ const IndentPage = () => {
       flex: 1,
       align: 'center',
       headerAlign: 'center',
-      renderCell: params => {
+      renderCell: (params) => {
         return params.row.prescribedOn
           ? dayjs(params.row.prescribedOn).format('DD/MM/YYYY')
           : ''
@@ -136,7 +167,7 @@ const IndentPage = () => {
       width: 180,
       align: 'center',
       headerAlign: 'center',
-      valueFormatter: params => {
+      valueFormatter: (params) => {
         return params.value
           ? dayjs(params.value).format('DD/MM/YYYY HH:mm')
           : ''
@@ -144,7 +175,6 @@ const IndentPage = () => {
     },
   ]
 
-  // Define custom filters
   const customFilters = [
     {
       field: 'itemName',
@@ -173,36 +203,35 @@ const IndentPage = () => {
     },
   ]
 
-  // Get unique values for select filters
-  const getUniqueValues = field => {
+  const getUniqueValues = (field) => {
     if (!indentData?.length) return []
 
     switch (field) {
       case 'itemName':
-        return [...new Set(indentData.map(row => row.itemName))]
+        return [...new Set(indentData.map((row) => row.itemName))]
           .filter(Boolean)
-          .map(value => ({
+          .map((value) => ({
             value: value,
             label: value,
           }))
       case 'patientName':
-        return [...new Set(indentData.map(row => row.patientName))]
+        return [...new Set(indentData.map((row) => row.patientName))]
           .filter(Boolean)
-          .map(value => ({
+          .map((value) => ({
             value: value,
             label: value,
           }))
       case 'createdBy':
-        return [...new Set(indentData.map(row => row.createdBy))]
+        return [...new Set(indentData.map((row) => row.createdBy))]
           .filter(Boolean)
-          .map(value => ({
+          .map((value) => ({
             value: value,
             label: value,
           }))
       case 'prescribedOn':
-        return [...new Set(indentData.map(row => row.prescribedOn))]
+        return [...new Set(indentData.map((row) => row.prescribedOn))]
           .filter(Boolean)
-          .map(value => ({
+          .map((value) => ({
             value: value,
             label: dayjs(value).format('DD/MM/YYYY'),
           }))
@@ -211,18 +240,15 @@ const IndentPage = () => {
     }
   }
 
-  // Filter data based on applied filters
   const filterData = (data, filters) => {
     if (!data) return []
 
-    return data.filter(row => {
+    return data.filter((row) => {
       return Object.entries(filters).every(([field, filterValue]) => {
         if (!filterValue || filterValue === null) return true
 
         const { prefix, value } = filterValue
         if (!value || (Array.isArray(value) && value.length === 0)) return true
-
-        const selectedValues = Array.isArray(value) ? value : [value]
 
         switch (field) {
           case 'itemName': {
@@ -257,17 +283,17 @@ const IndentPage = () => {
           }
           case 'prescribedQuantity': {
             const quantity = Number(row.prescribedQuantity)
-            const filterValue = Number(value)
+            const filterQty = Number(value)
 
-            if (isNaN(quantity) || isNaN(filterValue)) return true
+            if (isNaN(quantity) || isNaN(filterQty)) return true
 
             switch (prefix) {
               case 'LESS_THAN':
-                return quantity < filterValue
+                return quantity < filterQty
               case 'GREATER_THAN':
-                return quantity > filterValue
+                return quantity > filterQty
               case 'EQUAL_TO':
-                return quantity === filterValue
+                return quantity === filterQty
               default:
                 return true
             }
@@ -299,7 +325,9 @@ const IndentPage = () => {
     })
   }
 
-  if (isLoading) {
+  const isAdmin = Number(user?.roleDetails?.id) === 1
+
+  if (!selectedBranch || isLoading) {
     return (
       <Box
         display="flex"
@@ -315,25 +343,42 @@ const IndentPage = () => {
   if (error) {
     return (
       <Box p={3}>
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
+        <Alert severity="error">{error.message || String(error)}</Alert>
       </Box>
     )
   }
 
   return (
     <Box p={3}>
-      <div className="flex justify-end">
-        <Button
-          variant="outlined"
-          color="primary"
-          onClick={() => {
-            dispatch(openModal('addIndent'))
-          }}
-        >
-          Add New Indent
-        </Button>
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+        <h1 className="text-2xl font-semibold">IP Indent</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <FormControl sx={{ minWidth: 200 }} size="small">
+            <InputLabel>Branch</InputLabel>
+            <Select
+              value={selectedBranch}
+              onChange={(event) => setSelectedBranch(event.target.value)}
+              label="Branch"
+              disabled={!isAdmin && branches.length <= 1}
+            >
+              {branches.map((branch) => (
+                <MenuItem key={branch.id} value={branch.id}>
+                  {branch.branchCode || branch.name || branch.branchName}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => {
+              dispatch(openModal('addIndent'))
+            }}
+            disabled={!selectedBranch}
+          >
+            Add New Indent
+          </Button>
+        </div>
       </div>
       <Modal
         uniqueKey={'addIndent'}
@@ -342,17 +387,17 @@ const IndentPage = () => {
         }}
       >
         <AddIndentForm
-          isLoadingPatients={isLoadingPatients}
-          patientSuggestions={patientSuggestions}
-          debouncedGetPatientSuggestions={debouncedGetPatientSuggestions}
+          key={selectedBranch}
+          branchId={selectedBranch}
+          branchLabel={selectedBranchLabel}
+          ipPatients={ipPatients}
           pharmacyItems={pharmacyItems}
           isLoadingPharmacyItems={isLoadingPharmacyItems}
         />
       </Modal>
       <Box mt={3}>
-        {console.log('Total records being passed to grid:', indentData?.length)}
         <FilteredDataGrid
-          rows={indentData}
+          rows={indentData || []}
           columns={columns}
           customFilters={customFilters}
           filterData={filterData}
@@ -361,7 +406,7 @@ const IndentPage = () => {
           rowsPerPageOptions={[10, 20, 30, 50]}
           className="h-[calc(100vh-200px)]"
           disableSelectionOnClick
-          getRowId={row => row.id}
+          getRowId={(row) => row.id}
           initialState={{
             pagination: {
               pageSize: 20,

@@ -39,7 +39,6 @@ const getNavBarPaths = () => {
     '/indent',
     '/ipmodule',
     '/inbox',
-    '/ticketing',
     '/embryology',
   ]
 }

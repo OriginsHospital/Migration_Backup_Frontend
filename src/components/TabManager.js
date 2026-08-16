@@ -22,7 +22,6 @@ const routeTitleMap = {
   '/teams': 'Teams',
   '/inbox': 'Inbox',
   '/appointments': 'Appointments',
-  '/ticketing': 'Ticketing',
   '/patient': 'Patient',
   '/doctor': 'Doctor',
   '/pharmacy': 'Pharmacy',

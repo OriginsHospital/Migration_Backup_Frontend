@@ -430,22 +430,7 @@ export const API_ROUTES = {
   CREATE_TASK_COMMENT: '/taskTracker/createComment',
   CREATE_NEW_TASK: '/taskTracker/createTask',
   EDIT_TASK: '/taskTracker/editTask',
-  // Tickets API Routes
-  GET_TICKETS: '/tickets',
-  GET_TICKET_DETAILS: '/tickets',
-  CREATE_TICKET: '/tickets',
-  UPDATE_TICKET: '/tickets',
-  UPDATE_TICKET_STATUS: '/tickets',
-  DELETE_TICKET: '/tickets',
-  CREATE_TICKET_COMMENT: '/tickets',
-  GET_TASKS: '/tasks',
-  GET_TASK_DETAILS: '/tasks',
-  CREATE_TASK: '/tasks',
-  UPDATE_TASK: '/tasks',
-  UPDATE_TASK_STATUS: '/tasks',
-  DELETE_TASK: '/tasks',
   GET_INBOX_ITEMS: '/inbox',
-  GET_ACTIVE_STAFF: '/tickets/staff/active',
   APPLY_OPT_OUT: '/appointments/applyOptOut',
   DELETE_LINE_BILL_ITEM: '/appointments/deleteLineBillItem',
 
@@ -524,6 +509,7 @@ export const API_ROUTES = {
   DOWNLOAD_OTHER_PAYMENTS_INVOICE: '/otherPayments/downloadInvoice',
   GET_INDENT_LIST: '/ip/getIndentDetails',
   ADD_NEW_INDENT: '/ip/addNewIndent',
+  GET_INDENT_PHARMACY_ITEMS: '/ip/getIndentPharmacyItems',
 
   // IP Module endpoints
   GET_BUILDINGS: '/ip/getBuildings',

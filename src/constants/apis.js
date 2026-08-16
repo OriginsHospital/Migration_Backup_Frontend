@@ -6334,12 +6334,28 @@ export const deleteEmbryologyImage = async (token, payload) => {
   return response.json()
 }
 
-export const getIndentList = async (token) => {
+export const getIndentList = async (token, branchId) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_INDENT_LIST}`,
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_INDENT_LIST}?branchId=${branchId}`,
+    {
+      method: 'GET',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const getIndentPharmacyItems = async (token, branchId) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_INDENT_PHARMACY_ITEMS}?branchId=${branchId}`,
     {
       method: 'GET',
       headers: myHeaders,
@@ -7085,293 +7101,6 @@ export const getBedDetails = async (token, bedId) => {
     `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_BED_DETAILS}/${bedId}`,
     {
       method: 'GET',
-      headers: myHeaders,
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// ========== TICKETS API FUNCTIONS ==========
-
-// Get all tickets with filters and pagination
-export const getTickets = async (token, filters = {}) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-
-  const queryParams = new URLSearchParams()
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== '') {
-      queryParams.append(key, value.toString())
-    }
-  })
-
-  const queryString = queryParams.toString()
-  const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_TICKETS}${queryString ? `?${queryString}` : ''}`
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: myHeaders,
-    redirect: 'follow',
-    credentials: 'include',
-  })
-  return response.json()
-}
-
-// Get ticket details by ID
-export const getTicketDetails = async (token, ticketId) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_TICKET_DETAILS}/${ticketId}`,
-    {
-      method: 'GET',
-      headers: myHeaders,
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Create new ticket
-export const createTicket = async (token, payload) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.CREATE_TICKET}`,
-      {
-        method: 'POST',
-        headers: myHeaders,
-        body: JSON.stringify(payload),
-        redirect: 'follow',
-        credentials: 'include',
-      },
-    )
-
-    const data = await response.json()
-
-    // If response is not ok, throw an error with the message from the API
-    if (!response.ok) {
-      const error = new Error(data.message || 'Failed to create ticket')
-      error.response = { data }
-      error.status = response.status
-      throw error
-    }
-
-    return data
-  } catch (error) {
-    // If it's already our custom error, re-throw it
-    if (error.response) {
-      throw error
-    }
-    // Otherwise, wrap it
-    const wrappedError = new Error(error.message || 'Failed to create ticket')
-    wrappedError.originalError = error
-    throw wrappedError
-  }
-}
-
-// Update ticket
-export const updateTicket = async (token, payload) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPDATE_TICKET}`,
-    {
-      method: 'PUT',
-      headers: myHeaders,
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Update ticket status
-export const updateTicketStatus = async (token, ticketId, status) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPDATE_TICKET_STATUS}/${ticketId}/status`,
-    {
-      method: 'PATCH',
-      headers: myHeaders,
-      body: JSON.stringify({ ticketId, status }),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Delete ticket
-export const deleteTicket = async (token, ticketId) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.DELETE_TICKET}/${ticketId}`,
-    {
-      method: 'DELETE',
-      headers: myHeaders,
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Create ticket comment
-export const createTicketComment = async (token, ticketId, commentText) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.CREATE_TICKET_COMMENT}/${ticketId}/comments`,
-    {
-      method: 'POST',
-      headers: myHeaders,
-      body: JSON.stringify({ ticketId, commentText }),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Get active staff for assignment dropdown
-export const getActiveStaff = async (token) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_ACTIVE_STAFF}`,
-    {
-      method: 'GET',
-      headers: myHeaders,
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// ==================== TASKS API ====================
-
-// Get all tasks with filters and pagination
-export const getTasks = async (token, filters = {}) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-
-  const queryParams = new URLSearchParams()
-  if (filters.status) queryParams.append('status', filters.status)
-  if (filters.search) queryParams.append('search', filters.search)
-  if (filters.page) queryParams.append('page', filters.page)
-  if (filters.limit) queryParams.append('limit', filters.limit)
-
-  const queryString = queryParams.toString()
-  const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_TASKS}${queryString ? `?${queryString}` : ''}`
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: myHeaders,
-    redirect: 'follow',
-    credentials: 'include',
-  })
-  return response.json()
-}
-
-// Get task details by ID
-export const getTaskDetails = async (token, taskId) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_TASK_DETAILS}/${taskId}`,
-    {
-      method: 'GET',
-      headers: myHeaders,
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Create new task
-export const createTask = async (token, payload) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.CREATE_TASK}`,
-    {
-      method: 'POST',
-      headers: myHeaders,
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Update task
-export const updateTask = async (token, payload) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPDATE_TASK}`,
-    {
-      method: 'PUT',
-      headers: myHeaders,
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Update task status
-export const updateTaskStatus = async (token, taskId, status) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPDATE_TASK_STATUS}/${taskId}/status`,
-    {
-      method: 'PATCH',
-      headers: myHeaders,
-      body: JSON.stringify({ taskId, status }),
-      redirect: 'follow',
-      credentials: 'include',
-    },
-  )
-  return response.json()
-}
-
-// Delete task
-export const deleteTask = async (token, taskId) => {
-  const myHeaders = new Headers()
-  myHeaders.append('Authorization', `Bearer ${token}`)
-  myHeaders.append('Content-Type', 'application/json')
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.DELETE_TASK}/${taskId}`,
-    {
-      method: 'DELETE',
       headers: myHeaders,
       redirect: 'follow',
       credentials: 'include',

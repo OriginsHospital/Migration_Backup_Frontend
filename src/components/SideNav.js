@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ToastContainer, toast } from 'react-toastify'
 import { Bounce } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
@@ -15,7 +15,7 @@ import LocalHospitalOutlinedIcon from '@mui/icons-material/LocalHospitalOutlined
 import LocalPharmacyOutlinedIcon from '@mui/icons-material/LocalPharmacyOutlined'
 import VaccinesOutlinedIcon from '@mui/icons-material/VaccinesOutlined'
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined'
-import { logout, getTickets, getTasks } from '@/constants/apis'
+import { logout } from '@/constants/apis'
 import { resetUser } from '@/redux/userSlice'
 import { withPermission } from './withPermission'
 import { ACCESS_TYPES } from '@/constants/constants'
@@ -33,7 +33,7 @@ import { LuCalendarDays } from 'react-icons/lu'
 import { FiUser, FiUsers } from 'react-icons/fi'
 import { LuLayoutDashboard, LuBedDouble } from 'react-icons/lu'
 import { HiUsers } from 'react-icons/hi2'
-import { TbTicket, TbInbox } from 'react-icons/tb'
+import { TbInbox } from 'react-icons/tb'
 
 import Image from 'next/image'
 import originslogo from '../../public/origins-new-logo.png'
@@ -53,7 +53,6 @@ function NavItem({
   icon,
   Iconn,
   subRoutes,
-  badgeCount,
 }) {
   const router = useRouter()
   const buttonRef = useRef('')
@@ -112,11 +111,6 @@ function NavItem({
                   >
                     {name}
                   </span>
-                  {badgeCount !== undefined && badgeCount > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center min-w-[20px]">
-                      {badgeCount > 99 ? '99+' : badgeCount}
-                    </span>
-                  )}
                 </div>
               </Link>
             ) : (
@@ -131,11 +125,6 @@ function NavItem({
                   >
                     {name}
                   </span>
-                  {badgeCount !== undefined && badgeCount > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center min-w-[20px]">
-                      {badgeCount > 99 ? '99+' : badgeCount}
-                    </span>
-                  )}
                 </div>
               </div>
             )}
@@ -230,11 +219,6 @@ function NavItem({
             <span className={`font-sans text-sm font-semibold text-secondary`}>
               {name}
             </span>
-            {badgeCount !== undefined && badgeCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {badgeCount > 99 ? '99+' : badgeCount}
-              </span>
-            )}
           </div>
         </Link>
       )}
@@ -367,51 +351,6 @@ function SideNav(props) {
   const hasInboxAccess = userEmail.toLowerCase() === 'nikhilsuvva77@gmail.com'
   // const iconsColor = '#06aee9'
 
-  // Fetch ticket count (assigned to user)
-  const { data: ticketsData } = useQuery({
-    queryKey: ['ticketsCount', user?.accessToken],
-    queryFn: async () => {
-      if (!user?.accessToken) return { total: 0 }
-      try {
-        const response = await getTickets(user.accessToken, {
-          page: 1,
-          limit: 1,
-        })
-        return response?.data?.pagination || { total: 0 }
-      } catch (error) {
-        console.warn('Failed to fetch tickets count:', error)
-        return { total: 0 }
-      }
-    },
-    enabled: !!user?.accessToken,
-    refetchInterval: 30000, // Refetch every 30 seconds
-    retry: false,
-  })
-
-  // Fetch task count (assigned to user)
-  const { data: tasksData } = useQuery({
-    queryKey: ['tasksCount', user?.accessToken],
-    queryFn: async () => {
-      if (!user?.accessToken) return { total: 0 }
-      try {
-        const response = await getTasks(user.accessToken, {
-          page: 1,
-          limit: 1,
-        })
-        return response?.data?.pagination || { total: 0 }
-      } catch (error) {
-        console.warn('Failed to fetch tasks count:', error)
-        return { total: 0 }
-      }
-    },
-    enabled: !!user?.accessToken,
-    refetchInterval: 30000, // Refetch every 30 seconds
-    retry: false,
-  })
-
-  const ticketsCount = ticketsData?.total || 0
-  const tasksCount = tasksData?.total || 0
-  const totalCount = ticketsCount + tasksCount
   const routes = useMemo(() => {
     const allRoutes = [
       {
@@ -446,12 +385,6 @@ function SideNav(props) {
         relatedModule: 'appointment',
         // icon: <HomeOutlined className="text-secondary" />,
         Iconn: GrSchedule,
-      },
-      {
-        path: '/ticketing',
-        name: 'Ticketing',
-        relatedModule: 'ticketing',
-        Iconn: TbTicket,
       },
       {
         path: '/patient',
@@ -814,9 +747,6 @@ function SideNav(props) {
               name={eachRouteObj.name}
               path={eachRouteObj.path}
               subRoutes={eachRouteObj.subRoutes}
-              badgeCount={
-                eachRouteObj.path === '/ticketing' ? totalCount : undefined
-              }
             />
           )
         })}

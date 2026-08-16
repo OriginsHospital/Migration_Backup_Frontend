@@ -6,10 +6,9 @@ import {
   Box,
   Typography,
   IconButton,
-  Chip,
+  Alert,
 } from '@mui/material'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { debounce } from 'lodash'
 import React, { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
@@ -18,18 +17,16 @@ import { closeModal } from '@/redux/modalSlice'
 import { Add, Close } from '@mui/icons-material'
 
 function AddIndentForm({
-  isLoadingPatients,
-  patientSuggestions,
-  debouncedGetPatientSuggestions,
+  branchId,
+  branchLabel,
+  ipPatients = [],
   pharmacyItems,
   isLoadingPharmacyItems,
-  isErrorPharmacyItems,
 }) {
-  const user = useSelector(store => store.user)
+  const user = useSelector((store) => store.user)
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
 
-  // Form state
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [selectedPharmacyItems, setSelectedPharmacyItems] = useState([])
   const [newItem, setNewItem] = useState({
@@ -37,50 +34,50 @@ function AddIndentForm({
     quantity: '',
   })
 
-  // Add indent mutation
   const { mutate: addIndent, isPending } = useMutation({
-    mutationFn: async payload => {
+    mutationFn: async (payload) => {
       const response = await addNewIndent(user?.accessToken, payload)
       return response
     },
-    onSuccess: data => {
+    onSuccess: (data) => {
       if (data.status === 200) {
-        toast.success('Indent added successfully!', toastconfig)
-        queryClient.invalidateQueries(['indentList'])
+        toast.success('Indent added and stock deducted', toastconfig)
+        queryClient.invalidateQueries({ queryKey: ['indentList'] })
+        queryClient.invalidateQueries({ queryKey: ['indentPharmacyItems'] })
+        queryClient.invalidateQueries({ queryKey: ['ipBilling'] })
         handleCloseModal()
         resetForm()
       } else {
         toast.error(data.message || 'Failed to add indent', toastconfig)
       }
     },
-    onError: error => {
+    onError: (error) => {
       console.error('Error adding indent:', error)
-      toast.error('Failed to add indent. Please try again.', toastconfig)
+      toast.error(
+        error?.message || 'Failed to add indent. Please try again.',
+        toastconfig,
+      )
     },
   })
 
-  // Handle patient selection
   const handlePatientChange = (event, newValue) => {
     setSelectedPatient(newValue)
   }
 
-  // Handle pharmacy item selection
   const handlePharmacyItemChange = (event, newValue) => {
-    setNewItem(prev => ({
+    setNewItem((prev) => ({
       ...prev,
       item: newValue,
     }))
   }
 
-  // Handle quantity change
-  const handleQuantityChange = e => {
-    setNewItem(prev => ({
+  const handleQuantityChange = (e) => {
+    setNewItem((prev) => ({
       ...prev,
       quantity: e.target.value,
     }))
   }
 
-  // Add item to list
   const handleAddItem = () => {
     if (!newItem.item || !newItem.quantity || newItem.quantity <= 0) {
       toast.error(
@@ -90,35 +87,44 @@ function AddIndentForm({
       return
     }
 
-    // Check if item already exists
     const existingItem = selectedPharmacyItems.find(
-      item => item.id === newItem.item.id,
+      (item) => item.id === newItem.item.id,
     )
     if (existingItem) {
       toast.error('This item is already in the list', toastconfig)
       return
     }
 
+    const available = Number(newItem.item.availableQuantity || 0)
+    const qty = parseInt(newItem.quantity, 10)
+    if (qty > available) {
+      toast.error(
+        `Only ${available} available in ${branchLabel || 'this branch'} pharmacy`,
+        toastconfig,
+      )
+      return
+    }
+
     const itemToAdd = {
       id: newItem.item.id,
       itemName: newItem.item.itemName,
-      prescribedQuantity: parseInt(newItem.quantity),
+      prescribedQuantity: qty,
+      availableQuantity: available,
     }
 
-    setSelectedPharmacyItems(prev => [...prev, itemToAdd])
-    setNewItem({ item: '', quantity: '' })
+    setSelectedPharmacyItems((prev) => [...prev, itemToAdd])
+    setNewItem({ item: null, quantity: '' })
   }
 
-  // Remove item from list
-  const handleRemoveItem = itemId => {
-    setSelectedPharmacyItems(prev => prev.filter(item => item.id !== itemId))
-    // setNewItem({ item: null, quantity: '' })
+  const handleRemoveItem = (itemId) => {
+    setSelectedPharmacyItems((prev) =>
+      prev.filter((item) => item.id !== itemId),
+    )
   }
 
-  // Handle form submission
   const handleSubmit = () => {
     if (!selectedPatient) {
-      toast.error('Please select a patient', toastconfig)
+      toast.error('Please select an admitted / booked patient', toastconfig)
       return
     }
 
@@ -127,9 +133,15 @@ function AddIndentForm({
       return
     }
 
+    if (!branchId) {
+      toast.error('Branch is required', toastconfig)
+      return
+    }
+
     const payload = {
       patientId: selectedPatient.id,
-      items: selectedPharmacyItems.map(item => ({
+      branchId: Number(branchId),
+      items: selectedPharmacyItems.map((item) => ({
         itemId: item.id,
         prescribedQuantity: item.prescribedQuantity,
       })),
@@ -138,14 +150,12 @@ function AddIndentForm({
     addIndent(payload)
   }
 
-  // Reset form
   const resetForm = () => {
     setSelectedPatient(null)
     setSelectedPharmacyItems([])
     setNewItem({ item: null, quantity: '' })
   }
 
-  // Handle modal close
   const handleCloseModal = () => {
     dispatch(closeModal())
     resetForm()
@@ -161,67 +171,60 @@ function AddIndentForm({
       </div>
 
       <div className="space-y-4">
-        {/* Patient Selection */}
+        <Alert severity="info">
+          Only patients admitted or booked in{' '}
+          <strong>{branchLabel || 'this branch'}</strong>. Stock will be
+          deducted from this branch pharmacy.
+        </Alert>
+
         <Autocomplete
-          freeSolo
-          loading={isLoadingPatients}
-          options={patientSuggestions}
-          getOptionLabel={option => {
-            return typeof option === 'string' ? option : option?.Name || ''
+          options={ipPatients}
+          loading={false}
+          getOptionLabel={(option) => {
+            if (!option) return ''
+            const name = option.Name || option.patientName || ''
+            const displayId = option.patientId ? ` (${option.patientId})` : ''
+            const room = option.roomCode ? ` · ${option.roomCode}` : ''
+            return `${name}${displayId}${room}`
           }}
+          isOptionEqualToValue={(option, value) => option?.id === value?.id}
           value={selectedPatient}
           onChange={handlePatientChange}
-          onInputChange={(event, newInputValue) => {
-            if (newInputValue && newInputValue.length > 2) {
-              debouncedGetPatientSuggestions(newInputValue)
-            }
-          }}
-          renderInput={params => (
+          noOptionsText="No admitted / booked patients in this branch"
+          renderInput={(params) => (
             <TextField
               {...params}
-              label="Patient"
+              label="Admitted / booked patient"
               name="patientName"
               required
               fullWidth
+              helperText="Search patients currently admitted or booked in this branch"
             />
           )}
         />
 
-        {/* Pharmacy Items Section */}
         <Box>
           <Typography variant="subtitle1" gutterBottom>
             Add Pharmacy Items
           </Typography>
 
-          <div className="flex gap-2 mb-4 w-[100%]">
+          <div className="flex gap-2 mb-4 w-[100%] flex-wrap">
             <Autocomplete
-              freeSolo
               loading={isLoadingPharmacyItems}
-              options={
-                pharmacyItems &&
-                newItem.item &&
-                typeof newItem.item === 'string'
-                  ? pharmacyItems.filter(option =>
-                      (option?.itemName || '')
-                        .toLowerCase()
-                        .startsWith(newItem.item.toLowerCase()),
-                    )
-                  : pharmacyItems || []
-              }
-              getOptionLabel={option => {
-                return typeof option === 'string'
-                  ? option
-                  : option?.itemName || ''
+              options={pharmacyItems || []}
+              getOptionLabel={(option) => {
+                if (!option) return ''
+                const name = option.itemName || option.name || ''
+                const qty = Number(option.availableQuantity || 0)
+                return `${name} (Avail: ${qty})`
               }}
+              isOptionEqualToValue={(option, value) => option?.id === value?.id}
               value={newItem.item}
               onChange={handlePharmacyItemChange}
-              renderInput={params => (
-                <TextField
-                  {...params}
-                  label="Select Item"
-                  size="small"
-                  sx={{ minWidth: 200 }}
-                />
+              sx={{ minWidth: 260, flex: 1 }}
+              noOptionsText={`No stock in ${branchLabel || 'this branch'} pharmacy`}
+              renderInput={(params) => (
+                <TextField {...params} label="Select Item" size="small" />
               )}
             />
 
@@ -232,6 +235,7 @@ function AddIndentForm({
               onChange={handleQuantityChange}
               size="small"
               inputProps={{ min: 1 }}
+              sx={{ width: 120 }}
             />
 
             <Button
@@ -244,14 +248,13 @@ function AddIndentForm({
             </Button>
           </div>
 
-          {/* Selected Items List */}
           {selectedPharmacyItems.length > 0 && (
             <Box>
               <Typography variant="subtitle2" gutterBottom>
                 Selected Items:
               </Typography>
               <div className="space-y-2">
-                {selectedPharmacyItems.map((item, index) => (
+                {selectedPharmacyItems.map((item) => (
                   <Box
                     key={item.id}
                     display="flex"
@@ -266,6 +269,9 @@ function AddIndentForm({
                       <Typography variant="body2">{item.itemName}</Typography>
                       <Typography variant="caption" color="textSecondary">
                         Quantity: {item.prescribedQuantity}
+                        {item.availableQuantity != null
+                          ? ` · Available: ${item.availableQuantity}`
+                          : ''}
                       </Typography>
                     </Box>
                     <IconButton
@@ -282,7 +288,6 @@ function AddIndentForm({
           )}
         </Box>
 
-        {/* Action Buttons */}
         <div className="flex justify-end gap-2 pt-4">
           <Button
             variant="outlined"
