@@ -35,7 +35,6 @@ import {
   Science as ScienceIcon,
   PregnantWoman as PregnantWomanIcon,
   Save as SaveIcon,
-  Edit as EditIcon,
   Lock as LockIcon,
   CalendarToday as CalendarTodayIcon,
   Visibility as VisibilityIcon,
@@ -76,22 +75,8 @@ import CloseIcon from '@mui/icons-material/Close'
 import CircularProgress from '@mui/material/CircularProgress'
 import { debounce } from 'lodash'
 import SummaryAutomatedEntryDrawer from './SummaryAutomatedEntryDrawer'
-import AddIcon from '@mui/icons-material/Add'
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
+import TrackerNotesCell, { TrackerNotesViewDialog } from './TrackerNotesCell'
+import DataAnalyticsTab from './DataAnalyticsTab'
 import { exportAsCSV, exportAsExcel } from '@/utils/reportExport'
 
 // User-level field access control configuration
@@ -823,9 +808,8 @@ function PatientTrackerReports() {
   // Reset activeTab if user doesn't have access to Data/Summary tabs
   useEffect(() => {
     if (!hasDataSummaryAccess) {
-      // When tabs are hidden, Summary Automated is at index 0, Summary Graph is at index 1
-      // If activeTab is 2 or 3 (from when tabs were visible), reset to 0
-      // If activeTab is 0 or 1, keep it (they map to Summary Automated and Summary Graph)
+      // When tabs are hidden, Summary Automated is at index 0, Data Analytics is at index 1
+      // If activeTab is 2 or 3 (from when Data/Summary were visible), reset to 0
       if (activeTab === 2 || activeTab === 3) {
         setActiveTab(0) // Switch to Summary Automated tab
       }
@@ -866,6 +850,7 @@ function PatientTrackerReports() {
     useState(false)
   const [entryPatientOption, setEntryPatientOption] = useState(null)
   const [entryPatientInput, setEntryPatientInput] = useState('')
+  const [notesPreview, setNotesPreview] = useState(null)
 
   // Patient History popup (Summary Automated - click on patient name)
   const [patientForHistory, setPatientForHistory] = useState(null)
@@ -944,7 +929,10 @@ function PatientTrackerReports() {
     if (!savedRecord?.patientId) return
     setTrackerOverrides((prev) => ({
       ...prev,
-      [savedRecord.patientId]: savedRecord,
+      [savedRecord.patientId]: {
+        ...(prev[savedRecord.patientId] || {}),
+        ...savedRecord,
+      },
     }))
   }, [])
 
@@ -1031,18 +1019,6 @@ function PatientTrackerReports() {
     const mobile = patient.mobileNo || patient.mobileNumber || ''
     return [id, name, mobile].filter(Boolean).join(' · ')
   }, [])
-
-  // Summary Graph data
-  const [graphSummaryData, setGraphSummaryData] = useState([])
-  const [isLoadingGraphSummary, setIsLoadingGraphSummary] = useState(false)
-
-  // Summary Graph tab filters (default referral filter set to 'Friends')
-  const [graphSummaryFromDate, setGraphSummaryFromDate] = useState(
-    dayjs(), // Set to current date
-  )
-  const [graphSummaryToDate, setGraphSummaryToDate] = useState(dayjs()) // Set to current date
-  const [graphSummaryBranch, setGraphSummaryBranch] = useState('ALL')
-  const [graphSummaryReferral, setGraphSummaryReferral] = useState('Friends')
 
   // Summary tab filters
   const [summaryFromDate, setSummaryFromDate] = useState(
@@ -2069,30 +2045,6 @@ function PatientTrackerReports() {
     automatedSummaryBranch,
   ])
 
-  // Fetch all patients for Summary Graph tab
-  useEffect(() => {
-    const fetchGraphSummary = async () => {
-      const summaryGraphTabIndex = hasDataSummaryAccess ? 3 : 1
-      if (activeTab === summaryGraphTabIndex) {
-        setIsLoadingGraphSummary(true)
-        try {
-          const response = await getAllPatients(userDetails.accessToken, '')
-          if (response.status === 200 && response.data) {
-            setGraphSummaryData(response.data || [])
-          } else {
-            setGraphSummaryData([])
-          }
-        } catch (error) {
-          console.error('Error fetching graph summary:', error)
-          setGraphSummaryData([])
-        } finally {
-          setIsLoadingGraphSummary(false)
-        }
-      }
-    }
-    fetchGraphSummary()
-  }, [activeTab, userDetails.accessToken, hasDataSummaryAccess])
-
   // Handle save
   const handleSave = async () => {
     // Validate required fields
@@ -3067,37 +3019,30 @@ function PatientTrackerReports() {
         align: 'center',
       },
       {
-        field: 'actions',
-        headerName: 'Actions',
-        width: 140,
+        field: 'notes',
+        headerName: 'Notes',
+        width: 260,
+        minWidth: 180,
+        flex: 1,
         headerAlign: 'center',
-        align: 'center',
+        align: 'left',
         sortable: false,
         filterable: false,
-        renderCell: (params) => {
-          const hasEntry = Boolean(
-            params.row?.hasTrackerEntry ||
-              trackerOverrides[params.row?.patientId],
-          )
-          return (
-            <Button
-              size="small"
-              variant={hasEntry ? 'outlined' : 'contained'}
-              color={hasEntry ? 'primary' : 'success'}
-              startIcon={hasEntry ? <EditIcon /> : <AddIcon />}
-              onClick={(e) => {
-                e.stopPropagation()
-                openEntryDrawerForPatient(params.row)
-              }}
-              sx={{ textTransform: 'none', minWidth: 110 }}
-            >
-              {hasEntry ? 'Edit' : 'Data Entry'}
-            </Button>
-          )
-        },
+        renderCell: (params) => (
+          <TrackerNotesCell
+            notes={params.row?.notes || ''}
+            onOpen={() =>
+              setNotesPreview({
+                notes: params.row?.notes || '',
+                patientName: params.row?.patientName || '',
+                patientId: params.row?.patientId || '',
+              })
+            }
+          />
+        ),
       },
     ],
-    [handleOpenPatientHistory, openEntryDrawerForPatient, trackerOverrides],
+    [handleOpenPatientHistory],
   )
 
   // Branch options for Summary Automated tab
@@ -3571,6 +3516,7 @@ function PatientTrackerReports() {
         id: patient.id || patient.patientId || `patient-${Math.random()}`,
         date: registrationDate,
         branch: branchName,
+        branchId: patient.branchId || null,
         patientId: patient.patientId || patient.PatientId || '-',
         patientName: patientName,
         mobileNumber:
@@ -3766,6 +3712,12 @@ function PatientTrackerReports() {
               patient.NumberOfEmbryosDiscarded ||
               0,
           ) || 0,
+        notes: String(patient.notes || '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
+          .replace(/\s+/g, ' ')
+          .trim(),
         hasTrackerEntry: false,
       }
 
@@ -3826,6 +3778,7 @@ function PatientTrackerReports() {
           row.cycleStatus,
           row.stageOfCycle,
           row.uptResult,
+          row.notes,
         ]
           .filter((v) => v != null && v !== '-' && v !== '')
           .join(' ')
@@ -3850,12 +3803,10 @@ function PatientTrackerReports() {
 
   const automatedSummaryExportColumns = useMemo(
     () =>
-      automatedSummaryColumns
-        .filter((col) => col.field !== 'actions')
-        .map(({ field, headerName }) => ({
-          field,
-          headerName,
-        })),
+      automatedSummaryColumns.map(({ field, headerName }) => ({
+        field,
+        headerName,
+      })),
     [automatedSummaryColumns],
   )
 
@@ -3930,279 +3881,8 @@ function PatientTrackerReports() {
     ],
   )
 
-  // Graph data processing for Summary Graph tab
-  const graphChartData = useMemo(() => {
-    let filteredData = graphSummaryData
-
-    // Filter by date range
-    if (graphSummaryFromDate || graphSummaryToDate) {
-      filteredData = filteredData.filter((patient) => {
-        const registrationDate =
-          patient.registrationDate ||
-          patient.registeredDate ||
-          patient.createdAt ||
-          patient.dateOfBirth
-        if (!registrationDate) return false
-
-        const patientDate = dayjs(registrationDate)
-        if (
-          graphSummaryFromDate &&
-          patientDate.isBefore(graphSummaryFromDate, 'day')
-        ) {
-          return false
-        }
-        if (
-          graphSummaryToDate &&
-          patientDate.isAfter(graphSummaryToDate, 'day')
-        ) {
-          return false
-        }
-        return true
-      })
-    }
-
-    // Filter by branch
-    if (graphSummaryBranch && graphSummaryBranch !== 'ALL') {
-      const selectedBranchCode = graphSummaryBranch
-        .toString()
-        .toUpperCase()
-        .trim()
-      // Branch ID to Branch Code mapping (fallback if userBranches doesn't have the data)
-      const branchIdToCodeMap = {
-        1: 'HYD',
-        2: 'HNK',
-        3: 'SPL',
-        4: 'KMM',
-      }
-
-      filteredData = filteredData.filter((patient) => {
-        // Strategy 1: Check branch field first (from API query - most reliable)
-        // The backend query now returns branch as a string code (HNK, HYD, KMM, SPL)
-        if (
-          patient.branch &&
-          typeof patient.branch === 'string' &&
-          patient.branch.trim()
-        ) {
-          const patientBranch = patient.branch.trim().toUpperCase()
-          if (patientBranch === selectedBranchCode) {
-            return true
-          }
-        }
-
-        // Strategy 2: Use branch ID mapping (1=HYD, 2=HNK, 3=SPL, 4=KMM)
-        const branchId =
-          patient.branchId || patient.BranchId || patient.branch_id
-        if (
-          branchId !== null &&
-          branchId !== undefined &&
-          branchId !== '' &&
-          branchId !== 'null'
-        ) {
-          const branchIdNum =
-            typeof branchId === 'number' ? branchId : parseInt(branchId)
-          if (!isNaN(branchIdNum) && branchIdToCodeMap[branchIdNum]) {
-            const mappedBranchCode = branchIdToCodeMap[branchIdNum]
-            if (mappedBranchCode === selectedBranchCode) {
-              return true
-            }
-          }
-        }
-
-        // Strategy 3: Match by branchId with userBranches
-        if (branchId && userBranches.length > 0) {
-          const branchIdNum =
-            typeof branchId === 'number' ? branchId : parseInt(branchId)
-          if (!isNaN(branchIdNum)) {
-            const branchObj = userBranches.find((b) => {
-              const bId = typeof b.id === 'number' ? b.id : parseInt(b.id)
-              return bId === branchIdNum
-            })
-            if (branchObj) {
-              const branchCode = (
-                branchObj.branchCode ||
-                branchObj.code ||
-                branchObj.name ||
-                ''
-              )
-                .toString()
-                .toUpperCase()
-                .trim()
-              if (branchCode === selectedBranchCode) {
-                return true
-              }
-            }
-          }
-        }
-
-        // Strategy 4: Try to match by direct branch fields from patient data
-        const patientBranchCode = (patient.branchCode || '')
-          .toString()
-          .toUpperCase()
-          .trim()
-        const patientBranchName = (patient.branchName || '')
-          .toString()
-          .toUpperCase()
-          .trim()
-        const patientBranchDetailsCode = (
-          patient.branchDetails?.branchCode || ''
-        )
-          .toString()
-          .toUpperCase()
-          .trim()
-        const patientBranchDetailsName = (patient.branchDetails?.name || '')
-          .toString()
-          .toUpperCase()
-          .trim()
-
-        // Check if any branch field matches (exact match)
-        if (patientBranchCode && patientBranchCode === selectedBranchCode) {
-          return true
-        }
-        if (patientBranchName && patientBranchName === selectedBranchCode) {
-          return true
-        }
-        if (
-          patientBranchDetailsCode &&
-          patientBranchDetailsCode === selectedBranchCode
-        ) {
-          return true
-        }
-        if (
-          patientBranchDetailsName &&
-          patientBranchDetailsName === selectedBranchCode
-        ) {
-          return true
-        }
-
-        return false
-      })
-    }
-
-    // Filter by referral source
-    if (graphSummaryReferral) {
-      filteredData = filteredData.filter((patient) => {
-        const referralSource =
-          patient.referralSource?.referralSource ||
-          patient.referralSource ||
-          patient.referralSourceName ||
-          ''
-        return referralSource.toString().trim() === graphSummaryReferral.trim()
-      })
-    }
-
-    // Process data for charts
-    // Branch distribution - properly map branches
-    const branchDistribution = filteredData.reduce((acc, patient) => {
-      let branchName = null
-
-      // Try to match by branchId first (most reliable)
-      if (patient.branchId && userBranches.length > 0) {
-        const branchObj = userBranches.find((b) => b.id === patient.branchId)
-        if (branchObj) {
-          branchName = branchObj.branchCode || branchObj.name || null
-        }
-      }
-
-      // Fallback to direct branch fields
-      if (!branchName) {
-        const patientBranchCode =
-          patient.branchCode ||
-          patient.branch ||
-          patient.branchName ||
-          patient.branchDetails?.branchCode ||
-          patient.branchDetails?.name
-        if (patientBranchCode) {
-          // Try to match with user branches by code/name
-          const matchedBranch = userBranches.find(
-            (b) =>
-              (b.branchCode &&
-                b.branchCode.toString().toUpperCase() ===
-                  patientBranchCode.toString().toUpperCase()) ||
-              (b.name &&
-                b.name.toString().toUpperCase() ===
-                  patientBranchCode.toString().toUpperCase()),
-          )
-          branchName = matchedBranch
-            ? matchedBranch.branchCode || matchedBranch.name
-            : patientBranchCode
-        }
-      }
-
-      // Use 'Unknown' only if no branch data found
-      const finalBranchName = branchName || 'Unknown'
-      acc[finalBranchName] = (acc[finalBranchName] || 0) + 1
-      return acc
-    }, {})
-
-    // Referral distribution
-    const referralDistribution = filteredData.reduce((acc, patient) => {
-      const referralSource =
-        patient.referralSource?.referralSource ||
-        patient.referralSource ||
-        patient.referralSourceName ||
-        'Unknown'
-      acc[referralSource] = (acc[referralSource] || 0) + 1
-      return acc
-    }, {})
-
-    // Date distribution (monthly)
-    const dateDistribution = filteredData.reduce((acc, patient) => {
-      const registrationDate =
-        patient.registrationDate ||
-        patient.registeredDate ||
-        patient.createdAt ||
-        patient.dateOfBirth
-      if (registrationDate) {
-        const month = dayjs(registrationDate).format('MMM YYYY')
-        acc[month] = (acc[month] || 0) + 1
-      }
-      return acc
-    }, {})
-
-    // Sort branch data by value (descending) for better visualization
-    const sortedBranchData = Object.entries(branchDistribution)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-
-    return {
-      branchData: sortedBranchData,
-      referralData: Object.entries(referralDistribution).map(
-        ([name, value]) => ({ name, value }),
-      ),
-      dateData: Object.entries(dateDistribution)
-        .map(([name, value]) => ({ name, value }))
-        .sort(
-          (a, b) =>
-            dayjs(a.name, 'MMM YYYY').valueOf() -
-            dayjs(b.name, 'MMM YYYY').valueOf(),
-        ),
-      totalPatients: filteredData.length,
-    }
-  }, [
-    graphSummaryData,
-    userBranches,
-    graphSummaryFromDate,
-    graphSummaryToDate,
-    graphSummaryBranch,
-    graphSummaryReferral,
-  ])
-
-  // Chart colors
-  const CHART_COLORS = [
-    '#06aee9',
-    '#8884d8',
-    '#82ca9d',
-    '#ffc658',
-    '#ff7300',
-    '#8dd1e1',
-    '#d084d0',
-    '#ffb347',
-    '#87ceeb',
-    '#dda0dd',
-  ]
-
   return (
-    <Box sx={{ p: 1.5, bgcolor: '#f5f7fa', height: '100vh', overflow: 'auto' }}>
+    <Box sx={{ p: 1.5, bgcolor: '#f5f7fa', minHeight: '100%' }}>
       <Breadcrumb />
 
       <Card
@@ -4229,7 +3909,7 @@ function PatientTrackerReports() {
             {hasDataSummaryAccess && <Tab label="Data" />}
             {hasDataSummaryAccess && <Tab label="Summary" />}
             <Tab label="Summary Automated" />
-            <Tab label="Summary Graph" />
+            <Tab label="Data Analytics" />
           </Tabs>
         </Box>
 
@@ -5295,12 +4975,24 @@ function PatientTrackerReports() {
                     '& .MuiDataGrid-cell': {
                       fontSize: '0.875rem',
                       alignItems: 'center',
+                      display: 'flex',
                       py: 0.75,
+                    },
+                    '& .MuiDataGrid-cell[data-field="notes"]': {
+                      overflow: 'hidden',
                     },
                   }}
                 />
               )}
             </Box>
+
+            <TrackerNotesViewDialog
+              open={Boolean(notesPreview)}
+              notes={notesPreview?.notes || ''}
+              patientName={notesPreview?.patientName || ''}
+              patientId={notesPreview?.patientId || ''}
+              onClose={() => setNotesPreview(null)}
+            />
 
             <SummaryAutomatedEntryDrawer
               open={entryDrawerOpen}
@@ -5316,353 +5008,18 @@ function PatientTrackerReports() {
           </CardContent>
         </PatientTrackerTabPanel>
 
-        {/* SUMMARY GRAPH TAB */}
+        {/* DATA ANALYTICS TAB */}
         <PatientTrackerTabPanel
           value={activeTab}
           index={hasDataSummaryAccess ? 3 : 1}
         >
-          <CardContent sx={{ p: 1.5 }}>
-            {/* Filters Section */}
-            <Box
-              sx={{
-                mb: 2,
-                display: 'flex',
-                gap: 2,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  label="From Date"
-                  value={graphSummaryFromDate}
-                  onChange={setGraphSummaryFromDate}
-                  format="DD/MM/YYYY"
-                  slotProps={{
-                    textField: {
-                      size: 'small',
-                      sx: { width: 180 },
-                    },
-                  }}
-                />
-                <DatePicker
-                  label="To Date"
-                  value={graphSummaryToDate}
-                  onChange={setGraphSummaryToDate}
-                  format="DD/MM/YYYY"
-                  slotProps={{
-                    textField: {
-                      size: 'small',
-                      sx: { width: 180 },
-                    },
-                  }}
-                />
-              </LocalizationProvider>
-              <FormControl sx={{ width: 150 }} size="small">
-                <InputLabel>Branch</InputLabel>
-                <Select
-                  value={graphSummaryBranch}
-                  onChange={(e) => setGraphSummaryBranch(e.target.value)}
-                  label="Branch"
-                >
-                  {automatedSummaryBranchOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ width: 200 }} size="small">
-                <InputLabel>Referral</InputLabel>
-                <Select
-                  value={graphSummaryReferral}
-                  onChange={(e) => setGraphSummaryReferral(e.target.value)}
-                  label="Referral"
-                >
-                  {automatedSummaryReferralOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-
-            {/* Charts Section */}
-            {isLoadingGraphSummary ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: '400px',
-                }}
-              >
-                <CircularProgress />
-              </Box>
-            ) : graphChartData.totalPatients === 0 ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: '400px',
-                  bgcolor: '#f5f5f5',
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                  No data available
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  No patient data matches the selected filters.
-                </Typography>
-              </Box>
-            ) : (
-              <Grid container spacing={2}>
-                {/* Total Patients Summary */}
-                <Grid item xs={12}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        Total Patients: {graphChartData.totalPatients}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Branch Distribution - Bar Chart */}
-                <Grid item xs={12} md={6}>
-                  <Card>
-                    <CardContent>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          mb: 1,
-                        }}
-                      >
-                        <Typography variant="h6" gutterBottom sx={{ mb: 0 }}>
-                          Patients by Branch
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontWeight: 600 }}
-                        >
-                          Total: {graphChartData.totalPatients} patients
-                        </Typography>
-                      </Box>
-                      <Box sx={{ height: 350, mt: 2 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={graphChartData.branchData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis
-                              dataKey="name"
-                              angle={-45}
-                              textAnchor="end"
-                              height={80}
-                            />
-                            <YAxis />
-                            <RechartsTooltip
-                              formatter={(value, name, props) => [
-                                `${value} patients (${((value / graphChartData.totalPatients) * 100).toFixed(1)}%)`,
-                                props.payload.name || 'Branch',
-                              ]}
-                            />
-                            <Legend
-                              formatter={(value) => {
-                                const data = graphChartData.branchData.find(
-                                  (d) => d.name === value,
-                                )
-                                if (!data) return value
-                                const percentage = (
-                                  (data.value / graphChartData.totalPatients) *
-                                  100
-                                ).toFixed(1)
-                                return `${value}: ${data.value} (${percentage}%)`
-                              }}
-                            />
-                            <Bar dataKey="value" fill="#06aee9" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Referral Distribution - Pie Chart */}
-                <Grid item xs={12} md={6}>
-                  <Card>
-                    <CardContent>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          mb: 1,
-                        }}
-                      >
-                        <Typography variant="h6" gutterBottom sx={{ mb: 0 }}>
-                          Patients by Referral Source
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontWeight: 600 }}
-                        >
-                          Total: {graphChartData.totalPatients} patients
-                        </Typography>
-                      </Box>
-                      <Box sx={{ mt: 2, display: 'flex', gap: 3 }}>
-                        <Box sx={{ flex: 1, height: 350 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={graphChartData.referralData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={false}
-                                outerRadius={90}
-                                innerRadius={0}
-                                fill="#8884d8"
-                                dataKey="value"
-                              >
-                                {graphChartData.referralData.map(
-                                  (entry, index) => (
-                                    <Cell
-                                      key={`cell-${entry.name}-${index}`}
-                                      fill={
-                                        CHART_COLORS[
-                                          index % CHART_COLORS.length
-                                        ]
-                                      }
-                                    />
-                                  ),
-                                )}
-                              </Pie>
-                              <RechartsTooltip
-                                formatter={(value, name, props) => [
-                                  `${value} patients (${((value / graphChartData.totalPatients) * 100).toFixed(1)}%)`,
-                                  props.payload.name,
-                                ]}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </Box>
-                        <Box
-                          sx={{
-                            flex: 0.6,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Grid container spacing={0.5} sx={{ py: 0 }}>
-                            {graphChartData.referralData.map((entry, index) => {
-                              const percentage = (
-                                (entry.value / graphChartData.totalPatients) *
-                                100
-                              ).toFixed(1)
-                              return (
-                                <Grid
-                                  item
-                                  xs={6}
-                                  key={`legend-${entry.name}-${index}`}
-                                >
-                                  <Box
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      px: 0.75,
-                                      py: 0.25,
-                                      borderRadius: 0.5,
-                                      '&:hover': {
-                                        bgcolor: 'action.hover',
-                                      },
-                                    }}
-                                  >
-                                    <Box
-                                      sx={{
-                                        width: 12,
-                                        height: 12,
-                                        bgcolor:
-                                          CHART_COLORS[
-                                            index % CHART_COLORS.length
-                                          ],
-                                        borderRadius: 0.5,
-                                        mr: 0.75,
-                                        flexShrink: 0,
-                                      }}
-                                    />
-                                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          fontWeight: 500,
-                                          fontSize: '0.75rem',
-                                          display: 'block',
-                                          lineHeight: 1.2,
-                                        }}
-                                      >
-                                        {entry.name}
-                                      </Typography>
-                                      <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        sx={{
-                                          fontSize: '0.7rem',
-                                          display: 'block',
-                                          lineHeight: 1.2,
-                                        }}
-                                      >
-                                        {entry.value} ({percentage}%)
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                </Grid>
-                              )
-                            })}
-                          </Grid>
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Date Distribution - Line Chart */}
-                <Grid item xs={12}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        Patient Registration Trend
-                      </Typography>
-                      <Box sx={{ height: 350, mt: 2 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={graphChartData.dateData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <RechartsTooltip />
-                            <Legend />
-                            <Line
-                              type="monotone"
-                              dataKey="value"
-                              stroke="#82ca9d"
-                              strokeWidth={2}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            )}
-          </CardContent>
+          <DataAnalyticsTab
+            accessToken={userDetails.accessToken}
+            isActive={activeTab === (hasDataSummaryAccess ? 3 : 1)}
+            branchOptions={automatedSummaryBranchOptions}
+            referralOptions={automatedSummaryReferralOptions}
+            treatmentOptions={automatedSummaryTreatmentTypeOptions}
+          />
         </PatientTrackerTabPanel>
       </Card>
 

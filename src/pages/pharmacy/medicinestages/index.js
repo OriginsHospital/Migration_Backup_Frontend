@@ -584,7 +584,7 @@ function RenderAccordianDetails({
           updatedAt: fullItemData?.updatedAt || null,
           prescribed: medicineInfo.purchaseQuantity || 0,
           totalCost: discountedPrice,
-          refId: medicineInfo.refId, // Reference ID for line bill association
+          refId: medicineInfo.refId || medicineInfo.id,
           type: header?.type || 'Treatment', // Required: "Treatment" or "Consultation"
           purchaseDetails: Array.isArray(medicineInfo?.itemPurchaseInformation)
             ? medicineInfo.itemPurchaseInformation.map((row) => ({
@@ -1224,26 +1224,53 @@ function RenderAccordianDetails({
   //   },
   // })
   const reportRef = useRef(null)
+  const [invoiceHtml, setInvoiceHtml] = useState('')
   const invoiceModalId =
     header?.invoiceOrderId || header?.invoiceDbId || header?.appointmentId
   const generateReport = useMutation({
     mutationFn: async (payload) => {
       const res = await Generate_Invoice(user.accessToken, payload)
-      console.log(res.data)
-      reportRef.current.innerHTML = res?.data
-      console.log(res.data)
+      if (
+        res?.status !== 200 ||
+        typeof res?.data !== 'string' ||
+        !res.data.trim()
+      ) {
+        throw new Error(res?.message || 'Unable to generate invoice')
+      }
+      setInvoiceHtml(res.data)
+      return res.data
+    },
+    onError: (error) => {
+      toast.error(
+        error?.message || 'Unable to generate invoice for this payment',
+        toastconfig,
+      )
     },
   })
 
   const handleInvoicePrint = async () => {
+    if (!header?.appointmentId || !(header?.type || type)) {
+      toast.error(
+        'Invoice details are missing. Please reload and try again.',
+        toastconfig,
+      )
+      return
+    }
+
     const invoiceDbId = Number(header?.invoiceDbId)
-    await generateReport.mutate({
-      appointmentId: header.appointmentId,
-      productType: 'PHARMACY', // same values used in tranasction api
-      type: header.type, // Consultation or Treatment
-      ...(Number.isFinite(invoiceDbId) ? { id: invoiceDbId } : {}),
-    })
-    dispatch(openModal(invoiceModalId + 'invoice'))
+    try {
+      await generateReport.mutateAsync({
+        appointmentId: Number(header.appointmentId),
+        productType: 'PHARMACY',
+        type: header.type || type,
+        ...(Number.isInteger(invoiceDbId) && invoiceDbId > 0
+          ? { id: invoiceDbId }
+          : {}),
+      })
+      dispatch(openModal(invoiceModalId + 'invoice'))
+    } catch (error) {
+      // Toast is already shown in onError
+    }
   }
 
   const Print = async () => {
@@ -1652,7 +1679,11 @@ function RenderAccordianDetails({
             <Close />
           </IconButton>
         </div>
-        <div ref={reportRef} className="transition-all"></div>
+        <div
+          ref={reportRef}
+          className="transition-all"
+          dangerouslySetInnerHTML={{ __html: invoiceHtml }}
+        />
       </Modal>
       <TableContainer className="flex-1">
         <Table>

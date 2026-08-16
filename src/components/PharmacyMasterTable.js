@@ -1,8 +1,13 @@
 import React, { useState } from 'react'
-import { Close, Edit, EditNote } from '@mui/icons-material'
+import { Close, Edit, EditNote, DeleteOutlined } from '@mui/icons-material'
 import {
   Autocomplete,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControl,
   IconButton,
   InputAdornment,
@@ -28,6 +33,11 @@ function PharmacyMasterTable({
   selectedRow,
   setSelectedRow,
   getDynamicOptions,
+  canDelete = false,
+  deleteConfirmTitle = 'Delete record',
+  deleteConfirmMessage = 'Are you sure you want to delete this record? This cannot be undone.',
+  onDelete,
+  isDeleting = false,
   // getEachFieldBasedOnType,
 }) {
   // const [page, setPage] = React.useState(0)
@@ -38,6 +48,7 @@ function PharmacyMasterTable({
   // });
   const dispatch = useDispatch()
   const dropdowns = useSelector((store) => store.dropdowns)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   // // Avoid a layout jump when reaching the last page with empty rows.
   // const emptyRows =
@@ -164,6 +175,16 @@ function PharmacyMasterTable({
 
     // close the modal
     dispatch(closeModal())
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !onDelete) return
+    try {
+      await onDelete(deleteTarget)
+      setDeleteTarget(null)
+    } catch (error) {
+      // Parent mutation already shows a toast
+    }
   }
   // const getDynamicOptions = field => {
   //   switch (field.id) {
@@ -366,18 +387,33 @@ function PharmacyMasterTable({
             {
               field: 'actionField',
               headerName: 'Action',
-              width: 100,
+              width: canDelete ? 210 : 100,
+              sortable: false,
+              filterable: false,
               renderCell: (params) => {
                 return (
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    size="small"
-                    startIcon={<EditNote />}
-                    onClick={(e) => handleRowEdit(e, params.row)}
-                  >
-                    Edit
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      size="small"
+                      startIcon={<EditNote />}
+                      onClick={(e) => handleRowEdit(e, params.row)}
+                    >
+                      Edit
+                    </Button>
+                    {canDelete && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        startIcon={<DeleteOutlined />}
+                        onClick={() => setDeleteTarget(params.row)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
                 )
               },
             },
@@ -439,6 +475,41 @@ function PharmacyMasterTable({
           </Button>
         </div>
       </Modal>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onClose={() => {
+          if (!isDeleting) setDeleteTarget(null)
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{deleteConfirmTitle}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {deleteTarget?.name
+              ? `Are you sure you want to delete "${deleteTarget.name}"?`
+              : 'Are you sure you want to delete this record?'}
+          </DialogContentText>
+          {deleteConfirmMessage && (
+            <DialogContentText className="mt-2">
+              {deleteConfirmMessage}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleConfirmDelete}
+            disabled={isDeleting}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
     // </TableContainer>
   )

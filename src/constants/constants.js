@@ -36,6 +36,7 @@ export const API_ROUTES = {
   CREATE_PATIENT_TRACKER: '/patient-tracker/create',
   EDIT_PATIENT_TRACKER: '/patient-tracker/edit',
   UPSERT_PATIENT_TRACKER_EMBRYOLOGY_UPT: '/patient-tracker/embryology-upt',
+  UPSERT_PATIENT_TRACKER_NOTES: '/patient-tracker/notes',
   GET_DONAR_INFORMATION: '/visits/getDonarInformation',
   GET_DONAR_DATA_BY_VISIT: '/visits/getDonarDataByVisitId',
   SAVE_DONAR_RECORD: '/visits/saveDonar',
@@ -398,6 +399,11 @@ export const API_ROUTES = {
   GET_ALL_REFERRALS: '/masterData/referrals/getAllReferrals',
   ADD_NEW_REFERRAL: '/masterData/referrals/addReferral',
   EDIT_REFERRAL: '/masterData/referrals/editReferral',
+
+  GET_ALL_STATES: '/masterData/states/getAllStates',
+  ADD_NEW_STATE: '/masterData/states/addState',
+  EDIT_STATE: '/masterData/states/editState',
+  DELETE_STATE: '/masterData/states/deleteState',
 
   GET_ALL_CITIES: '/masterData/cities/getAllCities',
   ADD_NEW_CITY: '/masterData/cities/addCity',

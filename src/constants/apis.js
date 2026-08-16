@@ -568,6 +568,24 @@ export const upsertPatientTrackerEmbryologyUpt = async (token, payload) => {
   return response.json()
 }
 
+export const upsertPatientTrackerNotes = async (token, payload) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPSERT_PATIENT_TRACKER_NOTES}`,
+    {
+      method: 'PUT',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    },
+  )
+
+  return response.json()
+}
+
 export const getDonarInformation = async (token) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
@@ -1960,6 +1978,26 @@ export const editPharmacyMasterData = async (token, payload, url) => {
   return response.json()
 }
 
+export const deletePharmacyMasterData = async (token, url, id) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${url}/${id}`,
+    {
+      method: 'DELETE',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || (data?.status && data.status !== 200)) {
+    throw new Error(data?.message || 'Failed to delete record')
+  }
+  return data
+}
+
 export const getPharmacyMasterData = async (token, url) => {
   // call api
   const myHeaders = new Headers()
@@ -1991,7 +2029,16 @@ export const previewCloneMasterData = async (token, payload) => {
       credentials: 'include',
     },
   )
-  return response.json()
+  const data = await response.json().catch(() => ({}))
+  if (response.status === 404) {
+    return {
+      status: 404,
+      message:
+        'Clone API is not available on this server. Deploy and restart origins-backend, then try again.',
+      data: data?.data || [],
+    }
+  }
+  return data
 }
 
 export const cloneMasterData = async (token, payload) => {
@@ -2008,7 +2055,16 @@ export const cloneMasterData = async (token, payload) => {
       credentials: 'include',
     },
   )
-  return response.json()
+  const data = await response.json().catch(() => ({}))
+  if (response.status === 404) {
+    return {
+      status: 404,
+      message:
+        'Clone API is not available on this server. Deploy and restart origins-backend, then try again.',
+      data: data?.data || [],
+    }
+  }
+  return data
 }
 
 export const getPharmacyDetailsByDate = async (token, date, branch) => {

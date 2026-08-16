@@ -1,14 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  Autocomplete,
-  Button,
-  TextField,
-  Select,
-  MenuItem,
-} from '@mui/material'
+import { Autocomplete, Button, TextField } from '@mui/material'
 import dayjs from 'dayjs'
 import DeleteIcon from '@mui/icons-material/Delete'
 import IconButton from '@mui/material/IconButton'
+import { getMedicationDropdownOptions } from '@/utils/medicationSheetUtils'
 
 function MedicationSheet({
   medicationFormData,
@@ -102,22 +97,8 @@ function MedicationSheet({
 
       const newData = { ...(prevData || {}), rows: newRows }
 
-      const normalizeDayMonth = (value) => {
-        if (!value) return ''
-        const [dayPart, monthPart] = String(value).split('/')
-        const day = Number(dayPart)
-        const month = Number(monthPart)
-        if (!Number.isFinite(day) || !Number.isFinite(month)) return ''
-        return `${day}/${month}`
-      }
-
-      const normalizedToday = normalizeDayMonth(dayjs().format('DD/MM'))
-      const todayColumnIndex = Array.isArray(columns)
-        ? columns.findIndex(
-            (columnValue) => normalizeDayMonth(columnValue) === normalizedToday,
-          )
-        : -1
-      const startColumnIndex = todayColumnIndex >= 0 ? todayColumnIndex : 0
+      // Always fill from Day 1 (selected treatment start date), not from today.
+      const startColumnIndex = 0
       const availableColumnCount = Array.isArray(columns)
         ? Math.max(columns.length - startColumnIndex, 0)
         : 0
@@ -166,11 +147,10 @@ function MedicationSheet({
   }
   const [medications, setMedications] = useState([])
   useEffect(() => {
-    console.log(medicationOptions)
-    if (medicationOptions) {
-      setMedications(medicationOptions.map((item) => item.itemName))
-    }
-  }, [medicationOptions])
+    setMedications(
+      getMedicationDropdownOptions(medicationOptions, allBillTypeValues),
+    )
+  }, [medicationOptions, allBillTypeValues])
 
   // const dosageOptions = ['OD', 'BID', 'TID', 'QID'];
   const handleInputChange = (day, medication, value) => {

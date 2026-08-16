@@ -68,7 +68,8 @@ import HysteroscopySheetNew from './HysteroscopySheetNew'
 import HysteroLapOperationNotesForm from './HysteroLapOperationNotesForm'
 import {
   buildMedicationFormData,
-  getAutofilledMedicationRows,
+  getMedicationSheetRowsFromTemplate,
+  mergePrescribedMedicationRows,
 } from '@/utils/medicationSheetUtils'
 
 const HYSTERO_LAP_TYPE_OPTIONS = [
@@ -570,7 +571,15 @@ function Prescription({
   // })
   // console.log('treatmentCycleId', treatmentCycleId)
   const { data: medicationOptionsFollicular } = useQuery({
-    queryKey: ['medicationOptionsFollicular', treatmentCycleId],
+    queryKey: [
+      'medicationOptionsFollicular',
+      treatmentCycleId,
+      treatmentStatus?.START_ICSI,
+      treatmentStatus?.START_IUI,
+      treatmentStatus?.START_OITI,
+      treatmentStatus?.FET_START,
+      treatmentStatus?.START_ERA,
+    ],
     queryFn: async () => {
       const res = await getPrescriptionDetailsByTreatmentCycleId(
         user.accessToken,
@@ -580,6 +589,42 @@ function Prescription({
     },
     enabled: !!treatmentCycleId,
   })
+
+  useEffect(() => {
+    if (
+      !Array.isArray(medicationOptionsFollicular) ||
+      !medicationOptionsFollicular.length
+    ) {
+      return
+    }
+
+    const mergeIfNeeded = (setter) => {
+      setter((prev) => {
+        const existingRows = Array.isArray(prev?.rows) ? prev.rows : []
+        const hasNamedRows = existingRows.some((row) =>
+          String(row?.label || row?.value || '').trim(),
+        )
+        if (hasNamedRows) {
+          return prev
+        }
+        const mergedRows = mergePrescribedMedicationRows(
+          existingRows,
+          medicationOptionsFollicular,
+        )
+        if (mergedRows.length === existingRows.length) {
+          return prev
+        }
+        return {
+          ...(prev || {}),
+          rows: mergedRows,
+        }
+      })
+    }
+
+    mergeIfNeeded(setMedicationFormData)
+    mergeIfNeeded(setFETFormData)
+    mergeIfNeeded(setERAFormData)
+  }, [medicationOptionsFollicular])
   const updateTreatmentSheetMutation = useMutation({
     mutationFn: async (payload) => {
       const res = await updateTreatmentSheetByTreatmentCycleId(
@@ -641,10 +686,9 @@ function Prescription({
         if (responsejson?.data?.template) {
           let res = JSON.parse(responsejson.data.template)
           setFolicularFormData(res?.follicularSheet)
-          setMedicationFormData({
-            rows: res?.medicationRows,
-            ...res?.medicationSheet,
-          })
+          setMedicationFormData(
+            buildMedicationFormData(res?.medicationRows, res?.medicationSheet),
+          )
           setScanFormData({
             rows: res?.scanRows,
             ...res?.scanSheet,
@@ -893,14 +937,10 @@ function Prescription({
             res.medicationSheet.rows.length > 0
               ? res.medicationSheet.rows
               : medicationRows
-          const autofilledRows = getAutofilledMedicationRows(
-            { ...res?.medicationSheet, rows: candidateRows },
-            columns,
+          const fetMedicationFormData = buildMedicationFormData(
+            candidateRows,
+            res?.medicationSheet,
           )
-          const fetMedicationFormData = {
-            ...buildMedicationFormData(autofilledRows, res?.medicationSheet),
-            rows: autofilledRows,
-          }
 
           setFETFormData(fetMedicationFormData)
           setFETTemplate({
@@ -1071,30 +1111,32 @@ function Prescription({
         toast.success('Consents reviewed successfully')
         const defaultTreatmentTemplate = res.data
         if (defaultTreatmentTemplate) {
+          const medicationRows = getMedicationSheetRowsFromTemplate(
+            defaultTreatmentTemplate,
+          )
           setFolicularTemplate({
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
           })
           setMedicationFormData({
-            // columns: defaultTreatmentTemplate?.date,
-            rows: defaultTreatmentTemplate?.medicationSheet,
+            rows: medicationRows,
           })
           setScanFormData({
-            // columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.scanSheet,
           })
-          // console.log('under review consents calling handleUpdateTreatmentSheet')
-          // queryClient.invalidateQueries('treatmentStatus')
           let temp = {
             follicularSheet: folicularFormData,
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
-            medicationRows: defaultTreatmentTemplate?.medicationSheet,
-            medicationSheet: [],
+            medicationRows,
+            medicationSheet: { rows: medicationRows },
             scanRows: defaultTreatmentTemplate?.scanSheet,
             scanSheet: [],
           }
           handleUpdateTreatmentSheet(temp)
+          queryClient.invalidateQueries({
+            queryKey: ['medicationOptionsFollicular'],
+          })
         } else {
           dispatch(closeModal())
           queryClient.invalidateQueries('treatmentStatus')
@@ -1117,30 +1159,32 @@ function Prescription({
         toast.success('Consents reviewed successfully')
         const defaultTreatmentTemplate = res.data
         if (defaultTreatmentTemplate) {
+          const medicationRows = getMedicationSheetRowsFromTemplate(
+            defaultTreatmentTemplate,
+          )
           setFolicularTemplate({
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
           })
           setMedicationFormData({
-            // columns: defaultTreatmentTemplate?.date,
-            rows: defaultTreatmentTemplate?.medicationSheet,
+            rows: medicationRows,
           })
           setScanFormData({
-            // columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.scanSheet,
           })
-          // console.log('under review consents calling handleUpdateTreatmentSheet')
-          // queryClient.invalidateQueries('treatmentStatus')
           let temp = {
             follicularSheet: folicularFormData,
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
-            medicationRows: defaultTreatmentTemplate?.medicationSheet,
-            medicationSheet: [],
+            medicationRows,
+            medicationSheet: { rows: medicationRows },
             scanRows: defaultTreatmentTemplate?.scanSheet,
             scanSheet: [],
           }
           handleUpdateTreatmentSheet(temp)
+          queryClient.invalidateQueries({
+            queryKey: ['medicationOptionsFollicular'],
+          })
         }
       } else {
         toast.error(res.message)
@@ -1159,30 +1203,32 @@ function Prescription({
         toast.success('Consents reviewed successfully')
         const defaultTreatmentTemplate = res.data
         if (defaultTreatmentTemplate) {
+          const medicationRows = getMedicationSheetRowsFromTemplate(
+            defaultTreatmentTemplate,
+          )
           setFolicularTemplate({
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
           })
           setMedicationFormData({
-            // columns: defaultTreatmentTemplate?.date,
-            rows: defaultTreatmentTemplate?.medicationSheet,
+            rows: medicationRows,
           })
           setScanFormData({
-            // columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.scanSheet,
           })
-          // console.log('under review consents calling handleUpdateTreatmentSheet')
-          // queryClient.invalidateQueries('treatmentStatus')
           let temp = {
             follicularSheet: folicularFormData,
             columns: defaultTreatmentTemplate?.date,
             rows: defaultTreatmentTemplate?.follicularSheet,
-            medicationRows: defaultTreatmentTemplate?.medicationSheet,
-            medicationSheet: [],
+            medicationRows,
+            medicationSheet: { rows: medicationRows },
             scanRows: defaultTreatmentTemplate?.scanSheet,
             scanSheet: [],
           }
           handleUpdateTreatmentSheet(temp)
+          queryClient.invalidateQueries({
+            queryKey: ['medicationOptionsFollicular'],
+          })
         }
       } else {
         toast.error(res.message)
@@ -1407,23 +1453,29 @@ function Prescription({
         const defaultTreatmentTemplate = res.data
         toast.success('Consents reviewed successfully')
         if (defaultTreatmentTemplate) {
-          const fetMedicationFormData = buildMedicationFormData([])
+          const medicationRows = getMedicationSheetRowsFromTemplate(
+            defaultTreatmentTemplate,
+          )
+          const fetMedicationFormData = buildMedicationFormData(medicationRows)
           setFETFormData(fetMedicationFormData)
           setFETTemplate({
             columns: defaultTreatmentTemplate?.date,
-            rows: [],
+            rows: fetMedicationFormData.rows,
           })
           setScanFetFormData({
             rows: defaultTreatmentTemplate?.scanSheet,
           })
           let temp = {
             columns: defaultTreatmentTemplate?.date,
-            medicationRows: [],
+            medicationRows,
             medicationSheet: fetMedicationFormData,
             scanRows: defaultTreatmentTemplate?.scanSheet,
             scanSheet: [],
           }
           handleUpdateTreatmentFETSheet(temp)
+          queryClient.invalidateQueries({
+            queryKey: ['medicationOptionsFollicular'],
+          })
         }
       } else {
         toast.error(res.message)
@@ -1449,12 +1501,16 @@ function Prescription({
           }
 
           // Create treatment sheet template
+          const medicationRows = mergePrescribedMedicationRows(
+            getMedicationSheetRowsFromTemplate(initialTemplate),
+            [],
+          )
           const temp = {
             columns: initialTemplate.date || [dayjs().format('DD/MM')],
             rows: initialTemplate.follicularSheet || DEFAULT_FOLLICULAR_ROWS,
             follicularSheet: {},
-            medicationRows: [],
-            medicationSheet: [],
+            medicationRows,
+            medicationSheet: { rows: medicationRows },
             scanRows: initialTemplate?.scanSheet || [],
             scanSheet: [],
           }
@@ -1466,15 +1522,18 @@ function Prescription({
               'treatmentERASheet',
               treatmentCycleId,
             ]),
+            queryClient.invalidateQueries({
+              queryKey: ['medicationOptionsFollicular'],
+            }),
           ])
 
           // Set initial form data
           setERAFormData({
-            rows: initialTemplate.medicationSheet || [],
+            rows: medicationRows,
           })
           setERATemplate({
             columns: initialTemplate.date || [dayjs().format('DD/MM')],
-            rows: initialTemplate.medicationSheet || [],
+            rows: medicationRows,
             follicularRows:
               initialTemplate.follicularSheet || DEFAULT_FOLLICULAR_ROWS,
           })
@@ -2847,6 +2906,7 @@ function Prescription({
               setERAFormData={setERAFormData}
               eraTemplate={eraTemplate}
               medicationOptions={medicationOptionsFollicular}
+              allBillTypeValues={allBillTypeValues}
             />
             <ScanSheet
               scanFormData={scanEraFormData}

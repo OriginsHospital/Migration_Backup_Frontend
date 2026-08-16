@@ -16,6 +16,7 @@ import {
 import {
   addSubCategoryByCategoryId,
   createPharmacyMasterData,
+  deletePharmacyMasterData,
   deleteSubCategoryByCategoryId,
   editPharmacyMasterData,
   editSubCategoryByCategoryId,
@@ -1239,6 +1240,60 @@ const tabs = {
     ],
     editUrl: API_ROUTES.EDIT_SUPPLY,
   },
+  states: {
+    label: 'States',
+    getUrl: API_ROUTES.GET_ALL_STATES,
+    fields: [
+      {
+        headerName: 'ID',
+        field: 'id',
+        type: 'text',
+      },
+      {
+        headerName: 'State Name',
+        field: 'name',
+        type: 'text',
+      },
+      {
+        headerName: 'Is Active',
+        field: 'isActive',
+        type: 'boolean',
+        renderCell: ({ row }) => (Number(row.isActive) === 1 ? 'Yes' : 'No'),
+      },
+      {
+        headerName: 'Created By',
+        field: 'createdBy',
+        type: 'text',
+      },
+      {
+        headerName: 'Updated By',
+        field: 'updatedBy',
+        type: 'text',
+      },
+    ],
+    createUrl: API_ROUTES.ADD_NEW_STATE,
+    createFields: [
+      {
+        label: 'State Name',
+        name: 'name',
+        type: 'text',
+        required: true,
+        id: 'name',
+      },
+      {
+        label: 'Is Active',
+        name: 'isActive',
+        type: 'trueOrFalse',
+        required: true,
+        id: 'isActive',
+      },
+    ],
+    editUrl: API_ROUTES.EDIT_STATE,
+    deleteUrl: API_ROUTES.DELETE_STATE,
+    deleteConfirmTitle: 'Delete State',
+    deleteConfirmMessage:
+      'This removes the state from Patient Registration. If cities or patients already use it, deletion will be blocked — set it Inactive instead.',
+  },
   cities: {
     label: 'Cities',
     getUrl: API_ROUTES.GET_ALL_CITIES,
@@ -1279,7 +1334,8 @@ const tabs = {
         type: 'select',
         required: true,
         id: 'stateId',
-        // optionsUrl: API_ROUTES.GET_ALL_STATES,
+        optionsUrl: API_ROUTES.GET_ALL_STATES,
+        selectedLabel: 'name',
       },
       {
         label: 'Is Active',
@@ -1544,6 +1600,13 @@ function Managefields() {
       console.log('created', data)
       if (data?.status === 200) {
         queryClient.invalidateQueries(selectedTab)
+        queryClient.invalidateQueries({
+          queryKey: ['pharmacyMasterData', selectedTab],
+        })
+        if (selectedTab === 'states') {
+          queryClient.invalidateQueries({ queryKey: ['dropdowns'] })
+          queryClient.invalidateQueries({ queryKey: ['states'] })
+        }
         if (selectedTab === 'branches') {
           await refreshBranchAccess()
         }
@@ -1601,6 +1664,13 @@ function Managefields() {
     onSuccess: async (data, variables) => {
       console.log('Edit', data)
       queryClient.invalidateQueries(selectedTab)
+      queryClient.invalidateQueries({
+        queryKey: ['pharmacyMasterData', selectedTab],
+      })
+      if (selectedTab === 'states') {
+        queryClient.invalidateQueries({ queryKey: ['dropdowns'] })
+        queryClient.invalidateQueries({ queryKey: ['states'] })
+      }
       if (selectedTab === 'branches' && data?.status === 200) {
         await refreshBranchAccess()
       }
@@ -1633,6 +1703,34 @@ function Managefields() {
     setPayload(flattenedRow) // Also set the payload with the flattened data
     dispatch(openModal('editModalInPharmacyMasterData'))
   }
+
+  const deleteRowHandler = useMutation({
+    mutationKey: ['deletePharmacyMasterData', selectedTab],
+    mutationFn: async (row) => {
+      const deleteUrl = tabs[selectedTab]?.deleteUrl
+      if (!deleteUrl || !row?.id) {
+        throw new Error('Delete is not available for this record')
+      }
+      return deletePharmacyMasterData(
+        userDetails?.accessToken,
+        deleteUrl,
+        row.id,
+      )
+    },
+    onSuccess: async (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ['pharmacyMasterData', selectedTab],
+      })
+      if (selectedTab === 'states') {
+        queryClient.invalidateQueries({ queryKey: ['dropdowns'] })
+        queryClient.invalidateQueries({ queryKey: ['states'] })
+      }
+      toast.success(data?.message || 'Deleted successfully', toastconfig)
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Failed to delete', toastconfig)
+    },
+  })
 
   // Get all unique optionsUrls from the current tab's fields
   const optionsUrls = React.useMemo(() => {
@@ -1715,6 +1813,9 @@ function Managefields() {
       //     label: each.name,
       //   }))
       case 'stateId':
+        if (field.optionsUrl) {
+          break
+        }
         return dropdowns?.states?.map((each) => ({
           value: each.id,
           label: each.name,
@@ -1888,8 +1989,14 @@ function Managefields() {
     if (tabs[selectedTab]?.useCustomPanel || !tabs[selectedTab]?.createFields) {
       return
     }
-    setFormData({})
-    setPayload({})
+    const defaults = {}
+    if (
+      tabs[selectedTab].createFields.some((field) => field.name === 'isActive')
+    ) {
+      defaults.isActive = 1
+    }
+    setFormData(defaults)
+    setPayload(defaults)
     dispatch(openModal(selectedTab + 'createModal'))
   }
 
@@ -2045,6 +2152,16 @@ function Managefields() {
                       setSelectedRow={setSelectedRow}
                       handleRowEdit={handleRowEdit}
                       getDynamicOptions={getDynamicOptions}
+                      canDelete={Boolean(tabs[selectedTab]?.deleteUrl)}
+                      deleteConfirmTitle={
+                        tabs[selectedTab]?.deleteConfirmTitle || 'Delete record'
+                      }
+                      deleteConfirmMessage={
+                        tabs[selectedTab]?.deleteConfirmMessage ||
+                        'Are you sure you want to delete this record? This cannot be undone.'
+                      }
+                      onDelete={(row) => deleteRowHandler.mutateAsync(row)}
+                      isDeleting={deleteRowHandler.isPending}
                     />
                   </>
                 )}

@@ -156,7 +156,7 @@ const FETSheet = ({
       <MedicationSheet
         medicationFormData={fetFormData}
         setMedicationFormData={setFETFormData}
-        // allBillTypeValues={allBillTypeValues}
+        allBillTypeValues={allBillTypeValues}
         columns={fetTemplate?.columns}
         medicationOptions={medicationOptions}
         autofillOnly
