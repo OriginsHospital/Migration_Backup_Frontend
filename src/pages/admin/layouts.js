@@ -703,9 +703,12 @@ const LayoutsPage = () => {
     )
   }
 
-  const bedStatusSx = (status) => {
-    const key = String(status || 'Available').toLowerCase()
-    if (key === 'occupied')
+  const bedStatusSx = (bed) => {
+    const status = bed?.isBooked
+      ? 'Occupied'
+      : bed?.status || bed || 'Available'
+    const key = String(status).toLowerCase()
+    if (key === 'occupied' || key === 'booked')
       return { borderColor: '#F87171', bgcolor: '#FEE2E2' }
     if (key === 'reserved')
       return { borderColor: '#FBBF24', bgcolor: '#FEF3C7' }
@@ -1436,58 +1439,67 @@ const LayoutsPage = () => {
                             'repeat(auto-fill, minmax(100px, 1fr))',
                         }}
                       >
-                        {beds.map((bed) => (
-                          <Tooltip
-                            key={bed.id}
-                            title={`${bed.bedType || 'Normal'} · ${bed.status || 'Available'}`}
-                          >
-                            <Box
-                              sx={{
-                                ...bedStatusSx(bed.status),
-                                border: '2px solid',
-                                borderRadius: 2,
-                                p: 1,
-                                position: 'relative',
-                              }}
+                        {beds.map((bed) => {
+                          const displayStatus = bed.isBooked
+                            ? 'Occupied'
+                            : bed.status || 'Available'
+                          return (
+                            <Tooltip
+                              key={bed.id}
+                              title={`${bed.bedType || 'Normal'} · ${displayStatus}`}
                             >
-                              <Typography
-                                variant="caption"
-                                sx={{ fontWeight: 700, display: 'block' }}
+                              <Box
+                                sx={{
+                                  ...bedStatusSx(bed),
+                                  border: '2px solid',
+                                  borderRadius: 2,
+                                  p: 1,
+                                  position: 'relative',
+                                }}
                               >
-                                {bed.name || bed.bedNumber}
-                              </Typography>
-                              <Typography variant="caption">
-                                {bed.status || 'Available'}
-                              </Typography>
-                              <Stack
-                                direction="row"
-                                spacing={0}
-                                sx={{ position: 'absolute', top: 0, right: 0 }}
-                              >
-                                <IconButton
-                                  size="small"
-                                  onClick={() => openEditBed(bed)}
+                                <Typography
+                                  variant="caption"
+                                  sx={{ fontWeight: 700, display: 'block' }}
                                 >
-                                  <EditIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() =>
-                                    setDeleteConfirm({
-                                      open: true,
-                                      type: 'bed',
-                                      id: bed.id,
-                                      name: bed.name || bed.bedNumber,
-                                    })
-                                  }
+                                  {bed.name || bed.bedNumber}
+                                </Typography>
+                                <Typography variant="caption">
+                                  {displayStatus}
+                                </Typography>
+                                <Stack
+                                  direction="row"
+                                  spacing={0}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    right: 0,
+                                  }}
                                 >
-                                  <DeleteIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Stack>
-                            </Box>
-                          </Tooltip>
-                        ))}
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => openEditBed(bed)}
+                                  >
+                                    <EditIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() =>
+                                      setDeleteConfirm({
+                                        open: true,
+                                        type: 'bed',
+                                        id: bed.id,
+                                        name: bed.name || bed.bedNumber,
+                                      })
+                                    }
+                                  >
+                                    <DeleteIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </Stack>
+                              </Box>
+                            </Tooltip>
+                          )
+                        })}
                       </Box>
                     )}
                   </>

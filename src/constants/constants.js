@@ -530,6 +530,8 @@ export const API_ROUTES = {
   GET_CLOSED_IP: '/ip/getClosedIP',
   CREATE_IP_REGISTRATION: '/ip/createIPRegistration',
   CLOSE_IP_REGISTRATION: '/ip/closeIpRegistration',
+  GET_IP_BILLING: '/ip/getIPBilling',
+  COLLECT_IP_PAYMENT: '/ip/collectIPPayment',
   REGISTER_BUILDING: '/ip/registerBuilding',
   GET_LAYOUT_OVERVIEW: '/ip/layouts/overview',
   GET_BED_DETAILS: '/ip/layouts/bedDetails',

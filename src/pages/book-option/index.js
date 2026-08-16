@@ -91,17 +91,71 @@ const TYPE_META = {
   'Non-AC': { label: 'Non-AC', color: 'default', icon: null },
 }
 
+const BED_STATUS_STYLES = {
+  available: {
+    border: '2px solid #4ADE80',
+    bgcolor: '#F0FDF4',
+    color: '#166534',
+    cursor: 'pointer',
+    '&:hover': { bgcolor: '#DCFCE7', transform: 'translateY(-1px)' },
+  },
+  selected: {
+    border: '2px solid #2563EB',
+    bgcolor: '#DBEAFE',
+    color: '#1E3A8A',
+    cursor: 'pointer',
+  },
+  occupied: {
+    border: '2px solid #F87171',
+    bgcolor: '#FEE2E2',
+    color: '#991B1B',
+    opacity: 0.9,
+    cursor: 'not-allowed',
+  },
+  reserved: {
+    border: '2px solid #FBBF24',
+    bgcolor: '#FEF3C7',
+    color: '#92400E',
+    opacity: 0.9,
+    cursor: 'not-allowed',
+  },
+  maintenance: {
+    border: '2px solid #9CA3AF',
+    bgcolor: '#F3F4F6',
+    color: '#4B5563',
+    opacity: 0.85,
+    cursor: 'not-allowed',
+  },
+}
+
+const STATUS_LEGEND = [
+  { key: 'available', label: 'Available' },
+  { key: 'selected', label: 'Selected' },
+  { key: 'occupied', label: 'Occupied' },
+  { key: 'reserved', label: 'Reserved' },
+  { key: 'maintenance', label: 'Maintenance' },
+]
+
 function normalizeStatus(status) {
   return String(status || '')
     .trim()
     .toLowerCase()
 }
 
-function isBedAvailable(bed) {
+function getBedDisplayStatus(bed) {
+  if (bed?.isBooked) return 'Occupied'
   const status = normalizeStatus(bed?.status)
+  if (status === 'maintenance') return 'Maintenance'
+  if (status === 'reserved') return 'Reserved'
+  if (status === 'occupied' || status === 'booked') return 'Occupied'
+  return 'Available'
+}
+
+function isBedAvailable(bed) {
   return (
     bed?.isActive !== false &&
-    (status === 'available' || status === '' || !bed?.status)
+    !bed?.isBooked &&
+    getBedDisplayStatus(bed) === 'Available'
   )
 }
 
@@ -230,12 +284,30 @@ function BookOptionPage() {
     queryKey: ['bookOptionBeds', roomId],
     queryFn: () => getBeds(user.accessToken, roomId),
     enabled: Boolean(user.accessToken && roomId),
+    refetchOnMount: 'always',
   })
 
   const beds = useMemo(() => {
     const data = bedsResponse?.data || bedsResponse
-    return Array.isArray(data) ? data : []
+    return Array.isArray(data)
+      ? data.filter((bed) => bed.isActive !== false)
+      : []
   }, [bedsResponse])
+
+  const statusCounts = useMemo(() => {
+    const counts = {
+      available: 0,
+      occupied: 0,
+      reserved: 0,
+      maintenance: 0,
+      selected: bedId ? 1 : 0,
+    }
+    beds.forEach((bed) => {
+      const key = normalizeStatus(getBedDisplayStatus(bed))
+      if (counts[key] != null) counts[key] += 1
+    })
+    return counts
+  }, [beds, bedId])
 
   const availableBeds = useMemo(() => beds.filter(isBedAvailable), [beds])
 
@@ -289,12 +361,16 @@ function BookOptionPage() {
       }
       toast.success(response?.message || 'Bed booked successfully', toastconfig)
       queryClient.invalidateQueries({ queryKey: ['activeIP'] })
-      queryClient.invalidateQueries({ queryKey: ['bookOptionBeds', roomId] })
+      queryClient.invalidateQueries({ queryKey: ['bookOptionBeds'] })
+      queryClient.invalidateQueries({ queryKey: ['beds'] })
       queryClient.invalidateQueries({ queryKey: ['layoutsOverview'] })
-      router.push({
-        pathname: '/ipmodule',
-        query: { branch: branchId },
-      })
+      setBedId('')
+      setSelectedPatient(null)
+      setProcedureId('')
+      setPackageAmount('')
+      setDateTo(null)
+      setDateFrom(dayjs())
+      setAdmissionTime(dayjs())
     },
     onError: (error) => {
       toast.error(error?.message || 'Failed to book bed', toastconfig)
@@ -354,49 +430,10 @@ function BookOptionPage() {
   }
 
   const getBedTileStyles = (bed) => {
-    const status = normalizeStatus(bed.status)
     const selected = String(bed.id) === String(bedId)
-    if (selected) {
-      return {
-        border: '2px solid #2563EB',
-        bgcolor: '#DBEAFE',
-        color: '#1E3A8A',
-      }
-    }
-    if (status === 'occupied') {
-      return {
-        border: '2px solid #F87171',
-        bgcolor: '#FEE2E2',
-        color: '#991B1B',
-        opacity: 0.75,
-        cursor: 'not-allowed',
-      }
-    }
-    if (status === 'reserved') {
-      return {
-        border: '2px solid #FBBF24',
-        bgcolor: '#FEF3C7',
-        color: '#92400E',
-        opacity: 0.85,
-        cursor: 'not-allowed',
-      }
-    }
-    if (status === 'maintenance') {
-      return {
-        border: '2px solid #9CA3AF',
-        bgcolor: '#F3F4F6',
-        color: '#4B5563',
-        opacity: 0.7,
-        cursor: 'not-allowed',
-      }
-    }
-    return {
-      border: '2px solid #4ADE80',
-      bgcolor: '#F0FDF4',
-      color: '#166534',
-      cursor: 'pointer',
-      '&:hover': { bgcolor: '#DCFCE7', transform: 'translateY(-1px)' },
-    }
+    if (selected) return BED_STATUS_STYLES.selected
+    const key = normalizeStatus(getBedDisplayStatus(bed))
+    return BED_STATUS_STYLES[key] || BED_STATUS_STYLES.available
   }
 
   return (
@@ -869,10 +906,12 @@ function BookOptionPage() {
               >
                 {beds.map((bed) => {
                   const available = isBedAvailable(bed)
+                  const displayStatus = getBedDisplayStatus(bed)
+                  const selected = String(bed.id) === String(bedId)
                   return (
                     <Tooltip
                       key={bed.id}
-                      title={`${bed.name || bed.bedNumber} · ${bed.bedType || 'Normal'} · ${bed.status || 'Available'}${bed.hasOxygen ? ' · Oxygen' : ''}${bed.hasVentilator ? ' · Ventilator' : ''}`}
+                      title={`${bed.name || bed.bedNumber} · ${bed.bedType || 'Normal'} · ${displayStatus}${bed.hasOxygen ? ' · Oxygen' : ''}${bed.hasVentilator ? ' · Ventilator' : ''}`}
                     >
                       <Box
                         onClick={() => {
@@ -904,7 +943,7 @@ function BookOptionPage() {
                           variant="caption"
                           sx={{ textTransform: 'capitalize', fontWeight: 600 }}
                         >
-                          {bed.status || 'Available'}
+                          {selected ? 'Selected' : displayStatus}
                         </Typography>
                       </Box>
                     </Tooltip>
@@ -925,31 +964,23 @@ function BookOptionPage() {
               flexWrap="wrap"
               useFlexGap
             >
-              <Chip
-                size="small"
-                label="Available"
-                sx={{ bgcolor: '#F0FDF4', border: '1px solid #4ADE80' }}
-              />
-              <Chip
-                size="small"
-                label="Selected"
-                sx={{ bgcolor: '#DBEAFE', border: '1px solid #2563EB' }}
-              />
-              <Chip
-                size="small"
-                label="Occupied"
-                sx={{ bgcolor: '#FEE2E2', border: '1px solid #F87171' }}
-              />
-              <Chip
-                size="small"
-                label="Reserved"
-                sx={{ bgcolor: '#FEF3C7', border: '1px solid #FBBF24' }}
-              />
-              <Chip
-                size="small"
-                label="Maintenance"
-                sx={{ bgcolor: '#F3F4F6', border: '1px solid #9CA3AF' }}
-              />
+              {STATUS_LEGEND.map((item) => {
+                const style = BED_STATUS_STYLES[item.key]
+                const count = statusCounts[item.key] || 0
+                return (
+                  <Chip
+                    key={item.key}
+                    size="small"
+                    label={`${item.label} (${count})`}
+                    sx={{
+                      bgcolor: style.bgcolor,
+                      color: style.color,
+                      border: style.border,
+                      fontWeight: 600,
+                    }}
+                  />
+                )
+              })}
             </Stack>
           </Paper>
         </Grid>

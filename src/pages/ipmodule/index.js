@@ -1,29 +1,81 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useRouter } from 'next/router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs'
 import {
+  Alert,
   Box,
   Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   FormControl,
+  Grid,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
+  Stack,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Tabs,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material'
-import { getActiveIP, getClosedIP } from '@/constants/apis'
+import { DatePicker } from '@mui/x-date-pickers'
+import {
+  LocalHospital as DischargeIcon,
+  ReceiptLong as BillingIcon,
+} from '@mui/icons-material'
+import { toast } from 'react-toastify'
+import {
+  closeIpRegistration,
+  collectIPPayment,
+  getActiveIP,
+  getClosedIP,
+  getIPBilling,
+} from '@/constants/apis'
 import FilteredDataGrid from '@/components/FilteredDataGrid'
 import { withPermission } from '@/components/withPermission'
 import { ACCESS_TYPES } from '@/constants/constants'
+import { toastconfig } from '@/utils/toastconfig'
+
+const money = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '0.00'
+  return num.toFixed(2)
+}
 
 function IPModule() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const user = useSelector((store) => store.user)
   const branches = user?.branchDetails || []
 
   const [selectedBranch, setSelectedBranch] = useState('')
   const [activeTab, setActiveTab] = useState(0)
+  const [dischargeRow, setDischargeRow] = useState(null)
+  const [dischargeDate, setDischargeDate] = useState(dayjs())
+  const [billingRow, setBillingRow] = useState(null)
+  const [paymentMode, setPaymentMode] = useState('CASH')
+  const [collectForm, setCollectForm] = useState({
+    roomAmount: '',
+    medicineAmount: '',
+    packageAmount: '',
+    otherAmount: '',
+    otherDescription: '',
+    remarks: '',
+  })
 
   useEffect(() => {
     if (!branches?.length) return
@@ -52,6 +104,73 @@ function IPModule() {
     enabled: Boolean(user.accessToken && selectedBranch),
   })
 
+  const {
+    data: billingResponse,
+    isLoading: loadingBilling,
+    refetch: refetchBilling,
+  } = useQuery({
+    queryKey: ['ipBilling', billingRow?.id],
+    queryFn: () => getIPBilling(user.accessToken, billingRow.id),
+    enabled: Boolean(user.accessToken && billingRow?.id),
+  })
+
+  const billing = billingResponse?.data
+
+  useEffect(() => {
+    if (!billing?.pending) return
+    setCollectForm((prev) => ({
+      ...prev,
+      roomAmount: billing.pending.room ? String(billing.pending.room) : '',
+      medicineAmount: billing.pending.medicine
+        ? String(billing.pending.medicine)
+        : '',
+      packageAmount: billing.pending.package
+        ? String(billing.pending.package)
+        : '',
+    }))
+  }, [billing])
+
+  const dischargeMutation = useMutation({
+    mutationFn: (payload) => closeIpRegistration(user.accessToken, payload),
+    onSuccess: (response) => {
+      if (response?.status && response.status !== 200) {
+        toast.error(
+          response.message || 'Failed to discharge patient',
+          toastconfig,
+        )
+        return
+      }
+      toast.success('Patient discharged and bed freed', toastconfig)
+      setDischargeRow(null)
+      queryClient.invalidateQueries({ queryKey: ['activeIP'] })
+      queryClient.invalidateQueries({ queryKey: ['closedIP'] })
+      queryClient.invalidateQueries({ queryKey: ['bookOptionBeds'] })
+      queryClient.invalidateQueries({ queryKey: ['layoutsOverview'] })
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Failed to discharge patient', toastconfig)
+    },
+  })
+
+  const collectMutation = useMutation({
+    mutationFn: (payload) => collectIPPayment(user.accessToken, payload),
+    onSuccess: async () => {
+      toast.success('Payment collected', toastconfig)
+      setCollectForm((prev) => ({
+        ...prev,
+        otherAmount: '',
+        otherDescription: '',
+        remarks: '',
+      }))
+      await refetchBilling()
+      queryClient.invalidateQueries({ queryKey: ['activeIP'] })
+      queryClient.invalidateQueries({ queryKey: ['closedIP'] })
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Failed to collect payment', toastconfig)
+    },
+  })
+
   const handleBranchChange = (event) => {
     const branchId = event.target.value
     setSelectedBranch(branchId)
@@ -65,30 +184,121 @@ function IPModule() {
     )
   }
 
+  const collectTotal = useMemo(() => {
+    return (
+      Number(collectForm.roomAmount || 0) +
+      Number(collectForm.medicineAmount || 0) +
+      Number(collectForm.packageAmount || 0) +
+      Number(collectForm.otherAmount || 0)
+    )
+  }, [collectForm])
+
+  const handleCollect = () => {
+    if (!billingRow?.id) return
+    if (collectTotal <= 0) {
+      toast.error('Enter at least one amount to collect', toastconfig)
+      return
+    }
+    collectMutation.mutate({
+      ipId: Number(billingRow.id),
+      paymentMode,
+      roomAmount: Number(collectForm.roomAmount || 0),
+      medicineAmount: Number(collectForm.medicineAmount || 0),
+      packageAmount: Number(collectForm.packageAmount || 0),
+      otherAmount: Number(collectForm.otherAmount || 0),
+      otherDescription: collectForm.otherDescription || null,
+      remarks: collectForm.remarks || null,
+    })
+  }
+
+  const handleDischarge = () => {
+    if (!dischargeRow?.id) return
+    if (!dischargeDate) {
+      toast.error('Discharge date is required', toastconfig)
+      return
+    }
+    dischargeMutation.mutate({
+      id: Number(dischargeRow.id),
+      dateOfDischarge: dayjs(dischargeDate).format('YYYY-MM-DD'),
+    })
+  }
+
   const columns = [
-    { field: 'id', headerName: 'ID', width: 90 },
-    { field: 'patientId', headerName: 'Patient ID', width: 130 },
-    { field: 'visitId', headerName: 'Visit ID', width: 130 },
-    { field: 'roomCode', headerName: 'Room', width: 130 },
+    { field: 'id', headerName: 'ID', width: 80 },
+    { field: 'patientId', headerName: 'Patient ID', width: 110 },
+    {
+      field: 'patientName',
+      headerName: 'Display Name',
+      flex: 1,
+      minWidth: 180,
+    },
+    { field: 'visitId', headerName: 'Visit ID', width: 110 },
+    { field: 'roomCode', headerName: 'Room', width: 120 },
     {
       field: 'dateOfAdmission',
       headerName: 'Admission Date',
-      width: 180,
+      width: 140,
     },
     {
       field: 'timeOfAdmission',
       headerName: 'Admission Time',
-      width: 180,
+      width: 140,
     },
     {
       field: 'dateOfDischarge',
       headerName: 'Discharge Date',
-      width: 180,
+      width: 140,
     },
     {
       field: 'packageAmount',
       headerName: 'Package Amount',
-      width: 150,
+      width: 140,
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      sortable: false,
+      filterable: false,
+      width: 170,
+      renderCell: (params) => (
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
+          sx={{ height: '100%' }}
+        >
+          <Tooltip title="Billing / Collect payment">
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => {
+                setBillingRow(params.row)
+                setPaymentMode('CASH')
+              }}
+            >
+              <BillingIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {activeTab === 0 && (
+            <Tooltip title="Discharge">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => {
+                  setDischargeRow(params.row)
+                  setDischargeDate(
+                    params.row.dateOfDischarge
+                      ? dayjs(params.row.dateOfDischarge)
+                      : dayjs(),
+                  )
+                }}
+              >
+                <DischargeIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
+      ),
     },
   ]
 
@@ -153,6 +363,423 @@ function IPModule() {
           className="h-[calc(100vh-250px)]"
         />
       )}
+
+      <Dialog
+        open={Boolean(dischargeRow)}
+        onClose={() => !dischargeMutation.isPending && setDischargeRow(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Discharge patient</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography>
+              Discharge{' '}
+              <strong>{dischargeRow?.patientName || 'this patient'}</strong>{' '}
+              from room <strong>{dischargeRow?.roomCode || '-'}</strong> and
+              free the bed.
+            </Typography>
+            <DatePicker
+              label="Discharge date"
+              value={dischargeDate}
+              onChange={(value) => setDischargeDate(value)}
+              slotProps={{ textField: { fullWidth: true } }}
+            />
+            <Alert severity="info">
+              After discharge this record moves to Closed IP and the bed becomes
+              Available again.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDischargeRow(null)}
+            disabled={dischargeMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDischarge}
+            disabled={dischargeMutation.isPending}
+          >
+            {dischargeMutation.isPending ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              'Confirm discharge'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(billingRow)}
+        onClose={() => !collectMutation.isPending && setBillingRow(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>IP billing & collection</DialogTitle>
+        <DialogContent dividers>
+          {loadingBilling && !billing ? (
+            <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
+              <CircularProgress />
+            </Box>
+          ) : billing ? (
+            <Stack spacing={2.5}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Patient
+                  </Typography>
+                  <Typography sx={{ fontWeight: 600 }}>
+                    {billing.ip.patientName} (
+                    {billing.ip.patientDisplayId || billing.ip.patientId})
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Room / Bed
+                  </Typography>
+                  <Typography sx={{ fontWeight: 600 }}>
+                    {billing.ip.roomCode} · {billing.ip.bedName || 'Bed'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Stay
+                  </Typography>
+                  <Typography sx={{ fontWeight: 600 }}>
+                    {dayjs(billing.ip.dateOfAdmission).format('DD MMM YYYY')} ·{' '}
+                    {billing.ip.stayDays} day
+                    {billing.ip.stayDays === 1 ? '' : 's'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Status
+                  </Typography>
+                  <Box>
+                    <Chip
+                      size="small"
+                      color={billing.ip.isActive ? 'success' : 'default'}
+                      label={billing.ip.isActive ? 'Active IP' : 'Closed IP'}
+                    />
+                  </Box>
+                </Grid>
+              </Grid>
+
+              <Divider />
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Bill summary
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Item</TableCell>
+                    <TableCell align="right">Billed</TableCell>
+                    <TableCell align="right">Paid</TableCell>
+                    <TableCell align="right">Pending</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      Room amount
+                      <Typography
+                        variant="caption"
+                        display="block"
+                        color="text.secondary"
+                      >
+                        ₹{money(billing.ip.roomChargePerDay)} / day ×{' '}
+                        {billing.ip.stayDays} day
+                        {billing.ip.stayDays === 1 ? '' : 's'}
+                        {Number(billing.ip.bedCharge) > 0
+                          ? ` + bed ₹${money(billing.ip.bedCharge)}`
+                          : ''}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.billed.room)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.paid.room)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.pending.room)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Medicines bill</TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.billed.medicine)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.paid.medicine)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.pending.medicine)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Package amount</TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.billed.package)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.paid.package)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.pending.package)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Other</TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.billed.other)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.paid.other)}
+                    </TableCell>
+                    <TableCell align="right">
+                      ₹{money(billing.pending.other)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      ₹{money(billing.billed.total)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      ₹{money(billing.paid.total)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      ₹{money(billing.pending.total)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+
+              {billing.medicines?.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Medicines
+                  </Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Item</TableCell>
+                        <TableCell align="right">Qty</TableCell>
+                        <TableCell align="right">Rate</TableCell>
+                        <TableCell align="right">Amount</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {billing.medicines.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            {item.itemName || `Item ${item.id}`}
+                          </TableCell>
+                          <TableCell align="right">{item.quantity}</TableCell>
+                          <TableCell align="right">
+                            ₹{money(item.unitPrice)}
+                          </TableCell>
+                          <TableCell align="right">
+                            ₹{money(item.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+
+              <Divider />
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Collect payment
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Room amount"
+                    value={collectForm.roomAmount}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        roomAmount: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Medicines bill"
+                    value={collectForm.medicineAmount}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        medicineAmount: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Package amount"
+                    value={collectForm.packageAmount}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        packageAmount: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Other amount"
+                    value={collectForm.otherAmount}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        otherAmount: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Other description"
+                    placeholder="Labs, procedures, extras"
+                    value={collectForm.otherDescription}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        otherDescription: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Payment mode</InputLabel>
+                    <Select
+                      label="Payment mode"
+                      value={paymentMode}
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                    >
+                      <MenuItem value="CASH">Cash</MenuItem>
+                      <MenuItem value="UPI">UPI</MenuItem>
+                      <MenuItem value="CARD">Card</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Remarks"
+                    value={collectForm.remarks}
+                    onChange={(e) =>
+                      setCollectForm((prev) => ({
+                        ...prev,
+                        remarks: e.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+              </Grid>
+
+              <Alert severity={collectTotal > 0 ? 'success' : 'info'}>
+                Collecting now: ₹{money(collectTotal)}
+              </Alert>
+
+              {billing.payments?.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Collection history
+                  </Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Mode</TableCell>
+                        <TableCell align="right">Room</TableCell>
+                        <TableCell align="right">Medicines</TableCell>
+                        <TableCell align="right">Package</TableCell>
+                        <TableCell align="right">Other</TableCell>
+                        <TableCell align="right">Total</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {billing.payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            {payment.createdAt
+                              ? dayjs(payment.createdAt).format(
+                                  'DD MMM YYYY HH:mm',
+                                )
+                              : '-'}
+                          </TableCell>
+                          <TableCell>{payment.paymentMode}</TableCell>
+                          <TableCell align="right">
+                            ₹{money(payment.roomAmount)}
+                          </TableCell>
+                          <TableCell align="right">
+                            ₹{money(payment.medicineAmount)}
+                          </TableCell>
+                          <TableCell align="right">
+                            ₹{money(payment.packageAmount)}
+                          </TableCell>
+                          <TableCell align="right">
+                            ₹{money(payment.otherAmount)}
+                          </TableCell>
+                          <TableCell align="right">
+                            ₹{money(payment.totalAmount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+            </Stack>
+          ) : (
+            <Alert severity="warning">
+              Unable to load billing for this IP.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setBillingRow(null)}
+            disabled={collectMutation.isPending}
+          >
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCollect}
+            disabled={collectMutation.isPending || collectTotal <= 0}
+          >
+            {collectMutation.isPending ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              `Collect ₹${money(collectTotal)}`
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 }

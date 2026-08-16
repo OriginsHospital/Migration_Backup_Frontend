@@ -121,16 +121,21 @@ function ReviewTreatmentCall({
           treatmentCycleId,
         )
         if (response.status === 200) {
-          setAppointmentReasons(response.data)
-          return response.data
+          return response.data || []
         }
         throw new Error('Error fetching appointment reasons')
       },
       enabled: !!treatmentCycleId,
     })
 
+  const resolvedAppointmentReasons = useMemo(() => {
+    if (Array.isArray(appointmentReasons)) return appointmentReasons
+    if (Array.isArray(appointmentReasonsList)) return appointmentReasonsList
+    return []
+  }, [appointmentReasons, appointmentReasonsList])
+
   const appointmentReasonOptions = useMemo(() => {
-    const reasons = appointmentReasons || appointmentReasonsList || []
+    const reasons = resolvedAppointmentReasons
     const hasOthers = reasons.some(
       (each) => each?.name?.trim()?.toLowerCase() === 'others',
     )
@@ -138,7 +143,7 @@ function ReviewTreatmentCall({
       return reasons
     }
     return [...reasons, { id: OTHERS_REASON_VALUE, name: 'Others' }]
-  }, [appointmentReasons, appointmentReasonsList])
+  }, [resolvedAppointmentReasons])
 
   const selectedAppointmentReason = useMemo(() => {
     if (!reviewForm?.appointmentReasonId) return null
@@ -152,32 +157,35 @@ function ReviewTreatmentCall({
   const isOthersSelected =
     selectedAppointmentReason?.name?.trim()?.toLowerCase() === 'others'
 
-  const { mutate: createOtherReason, mutateAsync: createOtherReasonAsync } =
-    useMutation({
-      mutationFn: async (payload) => {
-        const response = await createOtherAppointmentReason(
-          userDetails.accessToken,
-          payload,
-        )
-        if (response.status === 200) {
-          toast.success(response.message, toastconfig)
-          setAppointmentReasons([
-            ...appointmentReasons,
-            {
-              id: response.data.appointmentReasonId,
-              name: response.data.appointmentReasonName,
-            },
-          ])
-          setReviewForm({
-            ...reviewForm,
-            appointmentReasonId: response.data.appointmentReasonId,
-          })
-          setInputValue(response.data.appointmentReasonName)
-        } else {
-          toast.error(response.message, toastconfig)
+  const appendCreatedReason = (createdReason) => {
+    if (!createdReason?.id) return
+    setAppointmentReasons((prev) => {
+      const current = Array.isArray(prev)
+        ? prev
+        : Array.isArray(appointmentReasonsList)
+          ? appointmentReasonsList
+          : []
+      if (current.some((reason) => reason.id === createdReason.id)) {
+        return current
+      }
+      return [...current, createdReason]
+    })
+    queryClient.setQueryData(
+      ['appointmentReasons', treatmentCycleId],
+      (prev) => {
+        const current = Array.isArray(prev) ? prev : []
+        if (current.some((reason) => reason.id === createdReason.id)) {
+          return current
         }
-        return response
+        return [...current, createdReason]
       },
+    )
+  }
+
+  const { mutateAsync: createOtherReasonAsync, isPending: isCreatingReason } =
+    useMutation({
+      mutationFn: async (payload) =>
+        createOtherAppointmentReason(userDetails.accessToken, payload),
     })
 
   function ConvertDataToDBFormat() {
@@ -247,14 +255,14 @@ function ReviewTreatmentCall({
         userDetails.accessToken,
         payload,
       )
-      if (res.status === 400) {
-        toast.error(res.message, toastconfig)
-      } else {
+      if (res.status === 200) {
         toast.success(res.message, toastconfig)
         dispatch(closeModal('reviewTreatmentCall'))
         queryClient.invalidateQueries('appointmentsForDoctor')
-        // setSelectedPatient({ ...selectedPatient, isReviewCall: true })
+        return res
       }
+      toast.error(res.message || 'Failed to book review call', toastconfig)
+      return res
     },
   })
 
@@ -279,31 +287,58 @@ function ReviewTreatmentCall({
 
       const duplicateReason = appointmentReasonOptions?.find(
         (each) =>
-          each?.name?.trim()?.toLowerCase() === trimmedComment.toLowerCase(),
+          each?.name?.trim()?.toLowerCase() === trimmedComment.toLowerCase() &&
+          each.id !== OTHERS_REASON_VALUE,
       )
 
-      if (duplicateReason?.id && duplicateReason.id !== OTHERS_REASON_VALUE) {
+      if (duplicateReason?.id) {
         appointmentReasonId = duplicateReason.id
       } else {
+        const patientId =
+          patientInfo?.id ??
+          patientInfo?.patientId ??
+          patientInfo?.patientMasterId
+        if (!patientId) {
+          toast.error(
+            'Patient details are missing for this appointment',
+            toastconfig,
+          )
+          return
+        }
+
         try {
           const response = await createOtherReasonAsync({
             appointmentReasonName: trimmedComment,
-            patientId: patientInfo.id,
+            patientId,
             isSpouse: newReason.isSpouse ? 1 : 0,
           })
-          if (response?.status !== 200) {
+          const createdReasonId = response?.data?.appointmentReasonId
+          if (response?.status !== 200 || !createdReasonId) {
             toast.error(
               response?.message || 'Failed to create appointment reason',
               toastconfig,
             )
             return
           }
-          appointmentReasonId = response?.data?.appointmentReasonId
+          appendCreatedReason({
+            id: createdReasonId,
+            name: response?.data?.appointmentReasonName || trimmedComment,
+          })
+          appointmentReasonId = createdReasonId
         } catch {
           toast.error('Failed to create appointment reason', toastconfig)
           return
         }
       }
+    }
+
+    if (
+      appointmentReasonId == null ||
+      appointmentReasonId === OTHERS_REASON_VALUE ||
+      Number.isNaN(Number(appointmentReasonId))
+    ) {
+      toast.error('Please select a valid appointment reason', toastconfig)
+      return
     }
 
     const payload = {
@@ -346,15 +381,15 @@ function ReviewTreatmentCall({
     }
   }
 
-  const handleCreateNewReason = () => {
+  const handleCreateNewReason = async () => {
     if (!inputValue.trim()) {
       toast.error('Please enter a reason name', toastconfig)
       return
     }
 
-    // Check for duplicate reason
-    const isDuplicate = appointmentReasons?.some(
-      (reason) => reason.name.toLowerCase() === inputValue.toLowerCase(),
+    const isDuplicate = resolvedAppointmentReasons.some(
+      (reason) =>
+        reason?.name?.toLowerCase() === inputValue.trim().toLowerCase(),
     )
 
     if (isDuplicate) {
@@ -362,12 +397,49 @@ function ReviewTreatmentCall({
       return
     }
 
-    createOtherReason({
-      appointmentReasonName: inputValue,
-      patientId: patientInfo.id,
-      isSpouse: newReason.isSpouse ? 1 : 0,
-    })
-    setInputValue('')
+    const patientId =
+      patientInfo?.id ?? patientInfo?.patientId ?? patientInfo?.patientMasterId
+    if (!patientId) {
+      toast.error(
+        'Patient details are missing for this appointment',
+        toastconfig,
+      )
+      return
+    }
+
+    try {
+      const response = await createOtherReasonAsync({
+        appointmentReasonName: inputValue.trim(),
+        patientId,
+        isSpouse: newReason.isSpouse ? 1 : 0,
+      })
+      const createdReasonId = response?.data?.appointmentReasonId
+      if (response?.status !== 200 || !createdReasonId) {
+        toast.error(
+          response?.message || 'Failed to create appointment reason',
+          toastconfig,
+        )
+        return
+      }
+
+      const createdReasonName =
+        response?.data?.appointmentReasonName || inputValue.trim()
+      appendCreatedReason({
+        id: createdReasonId,
+        name: createdReasonName,
+      })
+      setReviewForm((prev) => ({
+        ...prev,
+        appointmentReasonId: createdReasonId,
+      }))
+      setInputValue(createdReasonName)
+      toast.success(
+        response.message || 'Appointment reason created',
+        toastconfig,
+      )
+    } catch {
+      toast.error('Failed to create appointment reason', toastconfig)
+    }
   }
 
   return (
@@ -585,7 +657,7 @@ function ReviewTreatmentCall({
           variant="contained"
           className="bg-secondary text-white"
           onClick={handleBookAppointment}
-          disabled={bookAppointment.isPending || createOtherReason.isPending}
+          disabled={bookAppointment.isPending || isCreatingReason}
         >
           Book Review Call
         </Button>

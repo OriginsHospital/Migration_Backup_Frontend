@@ -6941,6 +6941,47 @@ export const closeIpRegistration = async (token, payload) => {
   return response.json()
 }
 
+export const getIPBilling = async (token, ipId) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_IP_BILLING}/${ipId}`,
+    {
+      method: 'GET',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  const result = await response.json()
+  if (!response.ok || (result.status && result.status !== 200)) {
+    throw new Error(result.message || 'Failed to load IP billing')
+  }
+  return result
+}
+
+export const collectIPPayment = async (token, payload) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.COLLECT_IP_PAYMENT}`,
+    {
+      method: 'POST',
+      headers: myHeaders,
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  const result = await response.json()
+  if (!response.ok || (result.status && result.status !== 200)) {
+    throw new Error(result.message || 'Failed to collect payment')
+  }
+  return result
+}
+
 export const registerBuildingStructure = async (token, payload) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
