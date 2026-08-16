@@ -101,6 +101,9 @@ const TabPanel = ({ children, value, index }) => (
   <div hidden={value !== index}>{value === index && <Box>{children}</Box>}</div>
 )
 
+// Always use the desktop popper so date pickers never mount a full-screen MUI Modal.
+const DATE_PICKER_DESKTOP_QUERY = '@media (min-width: 0px)'
+
 function PaymentsPage() {
   const userDetails = useSelector((store) => store.user)
   const dropdowns = useSelector((store) => store.dropdowns)
@@ -131,608 +134,16 @@ function PaymentsPage() {
   const [summarySearchText, setSummarySearchText] = useState('')
   const [reportSearchText, setReportSearchText] = useState('')
   const fileInputRefs = useRef({})
-  const modalOpeningRef = useRef(false)
   const modalJustOpenedRef = useRef(false)
-  const modalStateRef = useRef(modal?.key)
 
-  // Update ref when modal state changes
   useEffect(() => {
-    modalStateRef.current = modal?.key
-  }, [modal?.key])
-
-  // Debug: Log modal state changes
-  useEffect(() => {
-    console.log('Modal state changed:', modal?.key)
-    console.log('Invoice URL:', invoiceUrl)
-    console.log('Receipt URL:', receiptUrl)
-    console.log('Modal opening ref:', modalOpeningRef.current)
-  }, [modal?.key, invoiceUrl, receiptUrl])
-
-  // IMMEDIATE FIX: Run cleanup as soon as component mounts - before anything else
-  useEffect(() => {
-    // Don't close modals on mount - only cleanup stuck backdrops
-    // Remove all backdrops immediately - AGGRESSIVE CLEANUP
-    const removeAllBackdrops = () => {
-      // Get current modal state
-      const currentModal = modal?.key
-
-      // Check if a Select menu is open - don't cleanup if it is
-      const hasOpenMenu =
-        document.querySelector(
-          '[class*="MuiMenu-root"][aria-hidden="false"], [class*="MuiPopover-root"][aria-hidden="false"]',
-        ) ||
-        document.querySelector('[role="listbox"][aria-expanded="true"]') ||
-        document.querySelector(
-          '[class*="MuiMenu-paper"]:not([style*="display: none"])',
-        )
-
-      // Don't cleanup if invoice or receipt modals are open, or if a modal is currently opening, or if a menu is open
-      if (
-        modalOpeningRef.current ||
-        currentModal === 'viewInvoiceModal' ||
-        currentModal === 'viewReceiptModal' ||
-        hasOpenMenu
-      ) {
-        return // Don't interfere with invoice/receipt modals or open menus
-      }
-
-      // Hide ALL backdrops if no modal is open (don't remove, let React handle it)
-      if (!currentModal) {
-        const backdrops = document.querySelectorAll(
-          '[class*="MuiBackdrop-root"], [class*="MuiModal-backdrop"], [class*="backdrop"], [class*="MuiBackdrop"]',
-        )
-        backdrops.forEach((el) => {
-          if (el && el.isConnected) {
-            el.style.display = 'none'
-            el.style.pointerEvents = 'none'
-            el.style.visibility = 'hidden'
-          }
-        })
-      } else {
-        // If modal is open, only hide backdrops without dialogs
-        const backdrops = document.querySelectorAll(
-          '[class*="MuiBackdrop-root"]',
-        )
-        backdrops.forEach((el) => {
-          const dialog = el.parentElement?.querySelector('[role="dialog"]')
-          const isOpen =
-            dialog && window.getComputedStyle(dialog).display !== 'none'
-          if (!isOpen && el && el.isConnected) {
-            el.style.display = 'none'
-            el.style.pointerEvents = 'none'
-            el.style.visibility = 'hidden'
-          }
-        })
-      }
-
-      // Hide modal root containers without open dialogs (don't remove, let React handle it)
-      const modalRoots = document.querySelectorAll('[class*="MuiModal-root"]')
-      modalRoots.forEach((el) => {
-        const dialog = el.querySelector('[role="dialog"]')
-        const isOpen =
-          dialog &&
-          window.getComputedStyle(dialog).display !== 'none' &&
-          window.getComputedStyle(dialog).visibility !== 'hidden'
-        if ((!isOpen || !currentModal) && el && el.isConnected) {
-          el.style.display = 'none'
-          el.style.visibility = 'hidden'
-        }
-      })
-
-      // Unlock body if no modals (but not if invoice/receipt modals are open)
-      if (
-        !currentModal ||
-        (currentModal !== 'viewInvoiceModal' &&
-          currentModal !== 'viewReceiptModal')
-      ) {
-        if (!currentModal) {
-          document.body.style.overflow = ''
-          document.body.style.paddingRight = ''
-          document.body.classList.remove('MuiModal-open')
-          document.body.removeAttribute('aria-hidden')
-          // Remove aria-hidden from #__next to fix dropdown issues
-          const nextDiv = document.getElementById('__next')
-          if (nextDiv) {
-            nextDiv.removeAttribute('aria-hidden')
-          }
-          // Remove inline styles if they're only for modal
-          const bodyStyle = document.body.getAttribute('style')
-          if (
-            bodyStyle &&
-            (bodyStyle.includes('overflow') ||
-              bodyStyle.includes('padding-right'))
-          ) {
-            const newStyle = bodyStyle
-              .replace(/overflow[^;]*;?/g, '')
-              .replace(/padding-right[^;]*;?/g, '')
-              .trim()
-            if (newStyle) {
-              document.body.setAttribute('style', newStyle)
-            } else {
-              document.body.removeAttribute('style')
-            }
-          }
-        }
-      }
-    }
-
-    // Run immediately multiple times
-    removeAllBackdrops()
-    setTimeout(() => removeAllBackdrops(), 10)
-    setTimeout(() => removeAllBackdrops(), 50)
-    setTimeout(() => removeAllBackdrops(), 100)
-    setTimeout(() => removeAllBackdrops(), 200)
-
-    // AGGRESSIVE FIX: Remove aria-hidden from #__next that blocks dropdowns
-    const fixAriaHidden = () => {
-      const nextDiv = document.getElementById('__next')
-      if (nextDiv) {
-        // Always remove aria-hidden to allow dropdowns to work
-        // Only keep it if there's actually a modal open with a dialog
-        const hasOpenModal = document.querySelector(
-          '[role="dialog"][aria-modal="true"]:not([style*="display: none"])',
-        )
-        if (!hasOpenModal) {
-          nextDiv.removeAttribute('aria-hidden')
-        }
-      }
-    }
-
-    // Run immediately and very frequently
-    fixAriaHidden()
-    const ariaHiddenInterval = setInterval(fixAriaHidden, 100)
-
-    // Also use MutationObserver to catch when aria-hidden is set
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === 'attributes' &&
-          mutation.attributeName === 'aria-hidden'
-        ) {
-          const target = mutation.target
-          if (
-            target.id === '__next' &&
-            target.getAttribute('aria-hidden') === 'true'
-          ) {
-            const hasOpenModal = document.querySelector(
-              '[role="dialog"][aria-modal="true"]:not([style*="display: none"])',
-            )
-            if (!hasOpenModal) {
-              target.removeAttribute('aria-hidden')
-            }
-          }
-        }
-      })
-    })
-
-    const nextDiv = document.getElementById('__next')
-    if (nextDiv) {
-      observer.observe(nextDiv, {
-        attributes: true,
-        attributeFilter: ['aria-hidden'],
-      })
-    }
-
     return () => {
-      clearInterval(ariaHiddenInterval)
-      observer.disconnect()
-    }
-
-    // Also inject global style to ensure sidebar is always clickable
-    const styleId = 'payments-page-fix'
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style')
-      style.id = styleId
-      style.textContent = `
-        /* CRITICAL: Ensure sidebar is always on top and clickable */
-        nav, [class*="sidebar"], [class*="SideNav"], [class*="side-nav"] {
-          z-index: 99999 !important;
-          pointer-events: auto !important;
-          position: relative !important;
-        }
-        /* Hide ALL backdrops by default - only show if modal is actually open */
-        [class*="MuiBackdrop-root"] {
-          pointer-events: none !important;
-        }
-        [class*="MuiBackdrop-root"]:not(:has(+ [role="dialog"][aria-modal="true"]:not([style*="display: none"]))) {
-          display: none !important;
-          visibility: hidden !important;
-        }
-        /* CRITICAL: Ensure backdrops don't cover Select menus */
-        [class*="MuiBackdrop-root"]:has(~ [class*="MuiMenu-root"]) {
-          display: none !important;
-          z-index: -1 !important;
-        }
-        /* Unlock body when no real modals */
-        body.MuiModal-open:not(:has([role="dialog"][aria-modal="true"]:not([style*="display: none"]))) {
-          overflow: auto !important;
-          padding-right: 0 !important;
-        }
-        /* Ensure all navigation links are ALWAYS clickable */
-        nav a, nav [href], [class*="sidebar"] a, [class*="SideNav"] a,
-        nav button, [class*="sidebar"] button, [class*="SideNav"] button {
-          pointer-events: auto !important;
-          z-index: 100000 !important;
-          position: relative !important;
-          cursor: pointer !important;
-        }
-        /* Force remove any overlays blocking navigation */
-        [class*="MuiBackdrop-root"][style*="position: fixed"] {
-          display: none !important;
-        }
-        /* Ensure Select dropdowns are always clickable */
-        [class*="MuiSelect-root"],
-        [class*="MuiFormControl-root"],
-        [class*="MuiInputBase-root"],
-        [class*="MuiSelect-select"],
-        [class*="MuiOutlinedInput-root"] {
-          pointer-events: auto !important;
-          z-index: 1 !important;
-        }
-        /* Ensure Select menu appears above everything */
-        [class*="MuiMenu-paper"],
-        [class*="MuiPopover-paper"],
-        [class*="MuiMenu-root"],
-        [class*="MuiPopover-root"],
-        [class*="MuiModal-root"]:has([class*="MuiMenu-paper"]) {
-          z-index: 99999 !important;
-          position: fixed !important;
-        }
-        /* Hide any backdrops that might cover menus */
-        [class*="MuiBackdrop-root"]:not(:has(+ [role="dialog"][aria-modal="true"]:not([style*="display: none"]))) {
-          z-index: -1 !important;
-        }
-        /* Ensure menus are visible */
-        [class*="MuiMenu-paper"] {
-          visibility: visible !important;
-          opacity: 1 !important;
-          display: block !important;
-        }
-        /* Force remove aria-hidden from #__next when Select is focused */
-        #__next:has([class*="MuiSelect-select"]:focus) {
-          aria-hidden: false !important;
-        }
-        /* Ensure Select can receive focus even if parent has aria-hidden */
-        [class*="MuiSelect-select"] {
-          pointer-events: auto !important;
-          cursor: pointer !important;
-        }
-      `
-      document.head.appendChild(style)
-    }
-
-    // Also add a global click handler to force navigation - AGGRESSIVE
-    const handleGlobalClick = (e) => {
-      const target = e.target
-
-      // Don't interfere if clicking on Select dropdowns, menus, or form elements
-      const isSelectClick =
-        target.closest('[role="button"][aria-haspopup="listbox"]') ||
-        target.closest('[class*="MuiSelect"]') ||
-        target.closest('[class*="MuiSelect-root"]') ||
-        target.closest('[class*="MuiSelect-select"]') ||
-        target.closest('[class*="MuiMenu"]') ||
-        target.closest('[class*="MuiPopover"]') ||
-        target.closest('[class*="MuiMenu-paper"]') ||
-        target.closest('[class*="MuiPopover-paper"]') ||
-        target.closest('[class*="MuiMenu-list"]') ||
-        target.closest('[role="listbox"]') ||
-        target.closest('[role="option"]') ||
-        target.closest('[role="presentation"]') ||
-        target.closest('[role="menu"]') ||
-        target.closest('input') ||
-        target.closest('select') ||
-        target.closest('textarea') ||
-        target.closest('[class*="MuiAutocomplete"]') ||
-        target.closest('[class*="MuiFormControl"]') ||
-        target.closest('[class*="MuiTextField"]') ||
-        target.closest('[class*="MuiInputBase"]') ||
-        target.closest('[class*="MuiOutlinedInput"]') ||
-        target.closest('[data-testid*="menu"]') ||
-        (target.getAttribute &&
-          target.getAttribute('aria-haspopup') === 'listbox') ||
-        // Check if any parent has MuiMenu classes
-        (target.closest('[class*="MuiPaper-root"]') &&
-          target
-            .closest('[class*="MuiPaper-root"]')
-            .querySelector('[class*="MuiMenu-list"]'))
-
-      if (isSelectClick) {
-        // Allow dropdown/menu/select interactions to work normally.
-        return // Don't interfere with form controls and dropdowns
-      }
-
-      // Don't interfere if clicking on modal or modal-related elements
-      const isModalClick =
-        target.closest('[role="dialog"]') ||
-        target.closest('[class*="MuiDialog"]') ||
-        target.closest('[class*="MuiModal"]') ||
-        modalOpeningRef.current ||
-        modal?.key === 'viewInvoiceModal' ||
-        modal?.key === 'viewReceiptModal'
-
-      if (isModalClick) {
-        return // Don't interfere with modals
-      }
-
-      const isNavClick =
-        target.closest('nav') ||
-        target.closest('[class*="sidebar"]') ||
-        (target.closest('a[href]') && !target.closest('[role="dialog"]')) ||
-        (target.tagName === 'A' && !target.closest('[role="dialog"]')) ||
-        target.closest('button[class*="nav"]')
-
-      if (isNavClick) {
-        // IMMEDIATELY close modals and cleanup
-        e.stopPropagation() // Prevent any modal handlers
-        dispatch(closeModal())
-        setInvoiceUrl(null)
-        setReceiptUrl(null)
-        removeAllBackdrops()
-
-        // Force hide any remaining backdrops immediately (don't remove, let React handle it)
-        requestAnimationFrame(() => {
-          const allBackdrops = document.querySelectorAll(
-            '[class*="MuiBackdrop-root"]',
-          )
-          allBackdrops.forEach((b) => {
-            if (b && b.isConnected) {
-              b.style.display = 'none'
-              b.style.pointerEvents = 'none'
-              b.style.visibility = 'hidden'
-            }
-          })
-          document.body.style.overflow = ''
-          document.body.style.paddingRight = ''
-          document.body.classList.remove('MuiModal-open')
-        })
-      }
-    }
-
-    // Use capture phase with high priority to catch clicks early
-    document.addEventListener('click', handleGlobalClick, {
-      capture: true,
-      passive: false,
-    })
-    document.addEventListener('mousedown', handleGlobalClick, {
-      capture: true,
-      passive: false,
-    })
-
-    // Periodic cleanup to catch any stuck backdrops
-    const cleanupInterval = setInterval(() => {
-      const currentModal = modal?.key
-
-      // Check if a Select menu is open - don't cleanup if it is
-      const hasOpenMenu =
-        document.querySelector(
-          '[class*="MuiMenu-root"]:not([aria-hidden="true"])',
-        ) ||
-        document.querySelector(
-          '[class*="MuiPopover-root"]:not([aria-hidden="true"])',
-        ) ||
-        document.querySelector('[role="listbox"][aria-expanded="true"]') ||
-        (document.querySelector('[class*="MuiMenu-paper"]') &&
-          window.getComputedStyle(
-            document.querySelector('[class*="MuiMenu-paper"]'),
-          ).display !== 'none')
-
-      // Don't cleanup if invoice or receipt modals are open, or if a modal is opening, or if a menu is open
-      if (
-        !modalOpeningRef.current &&
-        !hasOpenMenu &&
-        (!currentModal ||
-          (currentModal !== 'viewInvoiceModal' &&
-            currentModal !== 'viewReceiptModal'))
-      ) {
-        removeAllBackdrops()
-      }
-    }, 150)
-
-    return () => {
-      // Cleanup on unmount
-      clearInterval(cleanupInterval)
-      removeAllBackdrops()
-      document.removeEventListener('click', handleGlobalClick, {
-        capture: true,
-      })
-      document.removeEventListener('mousedown', handleGlobalClick, {
-        capture: true,
-      })
-      const styleEl = document.getElementById(styleId)
-      if (styleEl && styleEl.isConnected && styleEl.parentNode) {
-        try {
-          if (styleEl.parentNode.contains(styleEl)) {
-            styleEl.remove()
-          }
-        } catch (error) {
-          // Element might already be removed
-        }
-      }
-    }
-  }, [dispatch, modal?.key])
-
-  // Global cleanup function to remove stuck modal backdrops
-  const cleanupStuckBackdrops = () => {
-    // Don't cleanup if invoice or receipt modals are open, or if a modal is currently opening
-    const currentModal = modal?.key
-    if (
-      modalOpeningRef.current ||
-      currentModal === 'viewInvoiceModal' ||
-      currentModal === 'viewReceiptModal'
-    ) {
-      return // Don't interfere with invoice/receipt modals
-    }
-
-    // Remove ALL MUI Dialog backdrops that are blocking navigation
-    const backdrops = document.querySelectorAll('[class*="MuiBackdrop-root"]')
-    backdrops.forEach((backdrop) => {
-      // Check if there's an associated open dialog
-      const dialog = backdrop.parentElement?.querySelector('[role="dialog"]')
-      const isOpen =
-        dialog && window.getComputedStyle(dialog).display !== 'none'
-
-      // If no open dialog, hide the backdrop (don't remove, let React handle it)
-      if (!isOpen) {
-        if (backdrop && backdrop.isConnected) {
-          backdrop.style.display = 'none'
-          backdrop.style.pointerEvents = 'none'
-          backdrop.style.visibility = 'hidden'
-        }
-        // Also hide any related overlay elements
-        const overlay = backdrop.parentElement?.querySelector(
-          '[class*="MuiModal-root"]',
-        )
-        if (
-          overlay &&
-          overlay.isConnected &&
-          !overlay.querySelector('[role="dialog"]')
-        ) {
-          overlay.style.display = 'none'
-          overlay.style.visibility = 'hidden'
-        }
-      }
-    })
-
-    // Remove body scroll lock if no modals are open
-    const openDialogs = document.querySelectorAll(
-      '[role="dialog"][aria-modal="true"]:not([style*="display: none"])',
-    )
-    if (openDialogs.length === 0) {
+      dispatch(closeModal())
       document.body.style.overflow = ''
       document.body.style.paddingRight = ''
-      // Also remove any data attributes MUI might add
-      document.body.removeAttribute('style')
-      // But preserve other styles if any
-      const currentStyle = document.body.getAttribute('style')
-      if (currentStyle && !currentStyle.includes('overflow')) {
-        document.body.style.cssText = currentStyle
-      }
+      document.body.classList.remove('MuiModal-open')
     }
-
-    // Force remove any elements with high z-index that might be blocking
-    const highZIndexElements = document.querySelectorAll('*')
-    highZIndexElements.forEach((el) => {
-      const zIndex = window.getComputedStyle(el).zIndex
-      if (
-        zIndex &&
-        parseInt(zIndex) > 1000 &&
-        el.classList.contains('MuiBackdrop-root')
-      ) {
-        const dialog = el.parentElement?.querySelector('[role="dialog"]')
-        if (
-          (!dialog || window.getComputedStyle(dialog).display === 'none') &&
-          el &&
-          el.isConnected
-        ) {
-          el.style.display = 'none'
-          el.style.pointerEvents = 'none'
-          el.style.visibility = 'hidden'
-        }
-      }
-    })
-  }
-
-  // Run cleanup on mount and periodically - more aggressive
-  useEffect(() => {
-    // Immediate cleanup - run multiple times to ensure it works
-    cleanupStuckBackdrops()
-    setTimeout(cleanupStuckBackdrops, 50)
-    setTimeout(cleanupStuckBackdrops, 100)
-    setTimeout(cleanupStuckBackdrops, 200)
-
-    // More frequent cleanup every 200ms to catch stuck backdrops quickly
-    const interval = setInterval(() => {
-      const currentModal = modal?.key
-      // Don't cleanup if invoice or receipt modals are open, or if a modal is opening
-      if (
-        !modalOpeningRef.current &&
-        (!currentModal ||
-          (currentModal !== 'viewInvoiceModal' &&
-            currentModal !== 'viewReceiptModal'))
-      ) {
-        cleanupStuckBackdrops()
-      }
-    }, 200)
-
-    // Also cleanup on any click - especially navigation clicks
-    const handleDocumentClick = (e) => {
-      const target = e.target
-
-      // Don't interfere if clicking on modal or modal-related elements
-      const isModalClick =
-        target.closest('[role="dialog"]') ||
-        target.closest('[class*="MuiDialog"]') ||
-        target.closest('[class*="MuiModal"]') ||
-        modalOpeningRef.current ||
-        modal?.key === 'viewInvoiceModal' ||
-        modal?.key === 'viewReceiptModal'
-
-      if (isModalClick) {
-        return // Don't interfere with modals
-      }
-
-      // If clicking on sidebar, navigation links, or any link
-      const isNavigationClick =
-        target.closest('nav') ||
-        target.closest('[class*="sidebar"]') ||
-        (target.closest('a[href]') && !target.closest('[role="dialog"]')) ||
-        (target.tagName === 'A' && !target.closest('[role="dialog"]')) ||
-        target.closest('button[class*="nav"]') ||
-        (target.onclick && target.closest('[role="navigation"]'))
-
-      if (isNavigationClick) {
-        // Force cleanup immediately
-        cleanupStuckBackdrops()
-        // Force close any modals
-        dispatch(closeModal())
-        setInvoiceUrl(null)
-        setReceiptUrl(null)
-
-        // Remove any remaining backdrops
-        const allBackdrops = document.querySelectorAll(
-          '[class*="MuiBackdrop-root"], [class*="MuiModal-backdrop"]',
-        )
-        allBackdrops.forEach((backdrop) => {
-          if (backdrop && backdrop.isConnected) {
-            backdrop.style.display = 'none'
-            backdrop.style.pointerEvents = 'none'
-            backdrop.style.visibility = 'hidden'
-          }
-        })
-
-        // Ensure body is not locked
-        document.body.style.overflow = ''
-        document.body.style.paddingRight = ''
-        document.body.classList.remove('MuiModal-open')
-      }
-    }
-
-    // Use capture phase to catch clicks early
-    document.addEventListener('click', handleDocumentClick, true)
-    document.addEventListener('mousedown', handleDocumentClick, true)
-
-    // Also listen for route changes
-    const handleRouteChange = () => {
-      cleanupStuckBackdrops()
-      dispatch(closeModal())
-    }
-
-    // Check if router is available
-    if (typeof window !== 'undefined' && window.next?.router) {
-      window.next.router.events?.on('routeChangeStart', handleRouteChange)
-    }
-
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('click', handleDocumentClick, true)
-      document.removeEventListener('mousedown', handleDocumentClick, true)
-      if (typeof window !== 'undefined' && window.next?.router) {
-        window.next.router.events?.off('routeChangeStart', handleRouteChange)
-      }
-      cleanupStuckBackdrops()
-    }
-  }, [dispatch, modal?.key])
+  }, [dispatch])
 
   // Fetch payments data
   const { data, isLoading, isFetching, isError, error } = useQuery({
@@ -826,27 +237,16 @@ function PaymentsPage() {
         toast.error('Invoice URL not available', toastconfig)
         return
       }
-      console.log('Opening invoice modal with URL:', url)
       try {
-        // Mark that we're opening a modal
-        modalOpeningRef.current = true
         modalJustOpenedRef.current = true
-        // Set URL first
         setInvoiceUrl(url)
-        // Open modal immediately
         dispatch(openModal('viewInvoiceModal'))
-        // Prevent closing for 500ms after opening
         setTimeout(() => {
           modalJustOpenedRef.current = false
-        }, 500)
-        // Reset flag after modal should be open
-        setTimeout(() => {
-          modalOpeningRef.current = false
-        }, 1000)
+        }, 300)
       } catch (error) {
         console.error('Error opening invoice modal:', error)
         toast.error('Failed to open invoice. Please try again.', toastconfig)
-        modalOpeningRef.current = false
         modalJustOpenedRef.current = false
       }
     },
@@ -859,27 +259,16 @@ function PaymentsPage() {
         toast.error('Receipt URL not available', toastconfig)
         return
       }
-      console.log('Opening receipt modal with URL:', url)
       try {
-        // Mark that we're opening a modal
-        modalOpeningRef.current = true
         modalJustOpenedRef.current = true
-        // Set URL first
         setReceiptUrl(url)
-        // Open modal immediately
         dispatch(openModal('viewReceiptModal'))
-        // Prevent closing for 500ms after opening
         setTimeout(() => {
           modalJustOpenedRef.current = false
-        }, 500)
-        // Reset flag after modal should be open
-        setTimeout(() => {
-          modalOpeningRef.current = false
-        }, 1000)
+        }, 300)
       } catch (error) {
         console.error('Error opening receipt modal:', error)
         toast.error('Failed to open receipt. Please try again.', toastconfig)
-        modalOpeningRef.current = false
         modalJustOpenedRef.current = false
       }
     },
@@ -2041,246 +1430,12 @@ function PaymentsPage() {
     }
   }, [paymentsData])
 
-  // Cleanup modals on unmount and ensure no modals are blocking navigation
-  useEffect(() => {
-    // Don't close invoice/receipt modals - they should stay open when clicked
-    // Only cleanup stuck backdrops that aren't associated with open modals
-
-    // Remove any stuck MUI Dialog backdrops
-    const removeStuckBackdrops = () => {
-      const currentModal = modal?.key
-      // Don't cleanup if invoice or receipt modals are open
-      if (
-        currentModal === 'viewInvoiceModal' ||
-        currentModal === 'viewReceiptModal'
-      ) {
-        return // Don't interfere with invoice/receipt modals
-      }
-
-      const backdrops = document.querySelectorAll('[class*="MuiBackdrop-root"]')
-      backdrops.forEach((backdrop) => {
-        if (
-          !backdrop.closest('[role="dialog"]') &&
-          backdrop &&
-          backdrop.isConnected
-        ) {
-          backdrop.style.display = 'none'
-          backdrop.style.pointerEvents = 'none'
-          backdrop.style.visibility = 'hidden'
-        }
-      })
-      // Also remove body overflow lock only if no modals are open
-      if (!currentModal) {
-        document.body.style.overflow = ''
-        document.body.style.paddingRight = ''
-      }
-    }
-
-    // Run cleanup immediately and on interval
-    removeStuckBackdrops()
-    const interval = setInterval(removeStuckBackdrops, 1000)
-
-    return () => {
-      clearInterval(interval)
-      // Only close modals on unmount if they're not invoice/receipt modals
-      const currentModal = modal?.key
-      if (
-        currentModal !== 'viewInvoiceModal' &&
-        currentModal !== 'viewReceiptModal'
-      ) {
-        dispatch(closeModal())
-        setInvoiceUrl(null)
-        setReceiptUrl(null)
-      }
-      // Final cleanup
-      removeStuckBackdrops()
-    }
-  }, [dispatch]) // Removed modal?.key from dependencies to prevent closing on modal open
-
-  // Additional safety: Close modals if they're blocking navigation clicks
-  useEffect(() => {
-    const handleNavigationClick = (e) => {
-      const target = e.target
-
-      // Don't interfere if clicking on modal or modal-related elements
-      const isModalClick =
-        target.closest('[role="dialog"]') ||
-        target.closest('[class*="MuiDialog"]') ||
-        target.closest('[class*="MuiModal"]') ||
-        modalOpeningRef.current ||
-        modal?.key === 'viewInvoiceModal' ||
-        modal?.key === 'viewReceiptModal'
-
-      if (isModalClick) {
-        return // Don't interfere with modals
-      }
-
-      // If clicking on sidebar or navigation elements, force close modals
-      const isNavigationClick =
-        target.closest('[class*="sidebar"]') ||
-        target.closest('[class*="nav"]') ||
-        target.closest('nav') ||
-        (target.closest('a[href]') && !target.closest('[role="dialog"]')) ||
-        (target.tagName === 'A' && !target.closest('[role="dialog"]'))
-
-      // Only close modals on navigation clicks, but allow invoice/receipt modals to work
-      if (
-        isNavigationClick &&
-        modal?.key &&
-        modal?.key !== 'viewInvoiceModal' &&
-        modal?.key !== 'viewReceiptModal'
-      ) {
-        dispatch(closeModal())
-        setInvoiceUrl(null)
-        setReceiptUrl(null)
-        // Remove any stuck backdrops
-        const backdrops = document.querySelectorAll(
-          '[class*="MuiBackdrop-root"]',
-        )
-        backdrops.forEach((backdrop) => {
-          if (backdrop && backdrop.isConnected) {
-            backdrop.style.display = 'none'
-            backdrop.style.pointerEvents = 'none'
-            backdrop.style.visibility = 'hidden'
-          }
-        })
-        document.body.style.overflow = ''
-        document.body.style.paddingRight = ''
-      }
-    }
-
-    document.addEventListener('click', handleNavigationClick, true)
-    return () => {
-      document.removeEventListener('click', handleNavigationClick, true)
-    }
-  }, [modal?.key, dispatch])
-
-  // Critical fix: Ensure no elements block navigation - run on every render
-  useEffect(() => {
-    const removeBlockingElements = () => {
-      // Get current modal state from Redux store directly (not from closure)
-      const currentModalKey = modal?.key
-
-      // Don't cleanup if invoice or receipt modals are open, or if a modal is currently opening
-      if (
-        modalOpeningRef.current ||
-        currentModalKey === 'viewInvoiceModal' ||
-        currentModalKey === 'viewReceiptModal'
-      ) {
-        // Ensure sidebar is still clickable even with modals open
-        const sidebar = document.querySelector(
-          'nav, [class*="sidebar"], [class*="SideNav"]',
-        )
-        if (sidebar) {
-          sidebar.style.zIndex = '9999'
-          sidebar.style.pointerEvents = 'auto'
-          sidebar.style.position = 'relative'
-        }
-        return // Don't interfere with invoice/receipt modals
-      }
-
-      // Remove all MUI backdrops that don't have an open dialog
-      const backdrops = document.querySelectorAll(
-        '[class*="MuiBackdrop-root"], [class*="MuiModal-backdrop"]',
-      )
-      backdrops.forEach((backdrop) => {
-        const parent = backdrop.parentElement
-        const dialog = parent?.querySelector('[role="dialog"]')
-        const isDialogOpen =
-          dialog &&
-          window.getComputedStyle(dialog).display !== 'none' &&
-          window.getComputedStyle(dialog).visibility !== 'hidden' &&
-          dialog.getAttribute('aria-modal') === 'true'
-
-        // If no open dialog or modal key is null, remove backdrop
-        if (
-          (!isDialogOpen || !currentModalKey) &&
-          backdrop &&
-          backdrop.isConnected
-        ) {
-          backdrop.style.display = 'none'
-          backdrop.style.pointerEvents = 'none'
-          backdrop.style.visibility = 'hidden'
-        }
-      })
-
-      // Remove any MUI Modal root containers without open dialogs
-      const modalRoots = document.querySelectorAll('[class*="MuiModal-root"]')
-      modalRoots.forEach((modalRoot) => {
-        const dialog = modalRoot.querySelector('[role="dialog"]')
-        const isOpen =
-          dialog && window.getComputedStyle(dialog).display !== 'none'
-        if (!isOpen && !currentModalKey && modalRoot && modalRoot.isConnected) {
-          modalRoot.style.display = 'none'
-          modalRoot.style.visibility = 'hidden'
-        }
-      })
-
-      // Ensure sidebar is always clickable - force z-index
-      const sidebar = document.querySelector(
-        'nav, [class*="sidebar"], [class*="SideNav"]',
-      )
-      if (sidebar) {
-        sidebar.style.zIndex = '9999'
-        sidebar.style.pointerEvents = 'auto'
-        sidebar.style.position = 'relative'
-      }
-
-      // Ensure body is not locked when no modals are open
-      if (!currentModalKey) {
-        document.body.style.overflow = ''
-        document.body.style.paddingRight = ''
-        document.body.classList.remove('MuiModal-open')
-        // Remove any data attributes
-        document.body.removeAttribute('aria-hidden')
-      }
-    }
-
-    // Run immediately multiple times to catch everything
-    removeBlockingElements()
-    const timeout1 = setTimeout(removeBlockingElements, 50)
-    const timeout2 = setTimeout(removeBlockingElements, 100)
-    const timeout3 = setTimeout(removeBlockingElements, 200)
-
-    // More frequent cleanup - but check modal state each time
-    const interval = setInterval(() => {
-      // Re-check modal state on each interval
-      const currentModal = modal?.key
-      if (
-        !modalOpeningRef.current &&
-        currentModal !== 'viewInvoiceModal' &&
-        currentModal !== 'viewReceiptModal'
-      ) {
-        removeBlockingElements()
-      }
-    }, 150)
-
-    return () => {
-      clearTimeout(timeout1)
-      clearTimeout(timeout2)
-      clearTimeout(timeout3)
-      clearInterval(interval)
-      // Don't run cleanup on unmount if invoice/receipt modals are open
-      const currentModal = modal?.key
-      if (
-        currentModal !== 'viewInvoiceModal' &&
-        currentModal !== 'viewReceiptModal'
-      ) {
-        removeBlockingElements()
-      }
-    }
-  }, []) // Removed modal?.key dependency - function will access current state via closure
-
   return (
     <Box
       sx={{
         p: 3,
         bgcolor: '#f5f7fa',
         minHeight: '100vh',
-        position: 'relative',
-        zIndex: 0, // Ensure it's below sidebar (z-20)
-        pointerEvents: 'auto', // Ensure clicks work
-        isolation: 'isolate', // Create new stacking context
       }}
     >
       <Card sx={{ borderRadius: 2, boxShadow: 2 }}>
@@ -2377,6 +1532,7 @@ function PaymentsPage() {
                   anchorEl={filterAnchorEl}
                   open={Boolean(filterAnchorEl)}
                   onClose={() => setFilterAnchorEl(null)}
+                  disableScrollLock
                   anchorOrigin={{
                     vertical: 'bottom',
                     horizontal: 'left',
@@ -2396,6 +1552,10 @@ function PaymentsPage() {
                             <InputLabel>{filter.label}</InputLabel>
                             <Select
                               multiple
+                              MenuProps={{
+                                disablePortal: true,
+                                disableScrollLock: true,
+                              }}
                               value={filterValues[filter.field]?.value || []}
                               label={filter.label}
                               onChange={(e) => {
@@ -2640,6 +1800,7 @@ function PaymentsPage() {
                   anchorEl={filterAnchorEl}
                   open={Boolean(filterAnchorEl)}
                   onClose={() => setFilterAnchorEl(null)}
+                  disableScrollLock
                   anchorOrigin={{
                     vertical: 'bottom',
                     horizontal: 'left',
@@ -2659,6 +1820,10 @@ function PaymentsPage() {
                             <InputLabel>{filter.label}</InputLabel>
                             <Select
                               multiple
+                              MenuProps={{
+                                disablePortal: true,
+                                disableScrollLock: true,
+                              }}
                               value={filterValues[filter.field]?.value || []}
                               label={filter.label}
                               onChange={(e) => {
@@ -3716,6 +2881,7 @@ function PaymentsPage() {
                       textField: { size: 'small', fullWidth: true },
                     }}
                     format="DD-MM-YYYY"
+                    desktopModeMediaQuery={DATE_PICKER_DESKTOP_QUERY}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={2}>
@@ -3732,6 +2898,7 @@ function PaymentsPage() {
                       textField: { size: 'small', fullWidth: true },
                     }}
                     format="DD-MM-YYYY"
+                    desktopModeMediaQuery={DATE_PICKER_DESKTOP_QUERY}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={2}>
@@ -4201,6 +3368,7 @@ const CreateOrderModalWrapper = () => {
             }))
           }
           format="DD-MM-YYYY"
+          desktopModeMediaQuery={DATE_PICKER_DESKTOP_QUERY}
           renderInput={(params) => <TextField {...params} fullWidth />}
         />
 
@@ -4292,75 +3460,6 @@ const CreatePaymentForm = ({
   const invoiceFileInputRef = useRef(null)
   const receiptFileInputRef = useRef(null)
 
-  // Remove any backdrops that might cover the Select menu
-  useEffect(() => {
-    const removeBackdropsForSelect = () => {
-      try {
-        // Find all Select menus
-        const menus = document.querySelectorAll(
-          '[class*="MuiMenu-root"], [class*="MuiPopover-root"]',
-        )
-        if (menus.length > 0) {
-          // Find and hide any backdrops that might be covering this menu
-          const backdrops = document.querySelectorAll(
-            '[class*="MuiBackdrop-root"]',
-          )
-          backdrops.forEach((backdrop) => {
-            // Check if backdrop still exists and is in the DOM
-            if (!backdrop.parentNode) return
-
-            // Check if this backdrop is not part of an open modal dialog
-            const dialog = backdrop.parentElement?.querySelector(
-              '[role="dialog"][aria-modal="true"]',
-            )
-            const isOpenDialog =
-              dialog && window.getComputedStyle(dialog).display !== 'none'
-            if (!isOpenDialog) {
-              // Only modify style, don't remove the element
-              backdrop.style.display = 'none'
-              backdrop.style.zIndex = '-1'
-              backdrop.style.visibility = 'hidden'
-            }
-          })
-        }
-      } catch (error) {
-        // Silently handle any errors to prevent crashes
-        console.warn('Error in removeBackdropsForSelect:', error)
-      }
-    }
-
-    // Run immediately and on interval (less frequently)
-    removeBackdropsForSelect()
-    const interval = setInterval(removeBackdropsForSelect, 500)
-
-    // Also listen for menu opens (but be careful)
-    const observer = new MutationObserver((mutations) => {
-      // Only process if menus are actually added
-      const hasMenuAdded = mutations.some((mutation) =>
-        Array.from(mutation.addedNodes).some(
-          (node) =>
-            node.nodeType === 1 &&
-            (node.classList?.contains('MuiMenu-root') ||
-              node.querySelector?.('[class*="MuiMenu-root"]')),
-        ),
-      )
-      if (hasMenuAdded) {
-        setTimeout(removeBackdropsForSelect, 50)
-      }
-    })
-
-    if (document.body) {
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      })
-    }
-
-    return () => {
-      clearInterval(interval)
-      observer.disconnect()
-    }
-  }, [])
   const queryClient = useQueryClient()
 
   const createPaymentMutation = useMutation({
@@ -4503,6 +3602,7 @@ const CreatePaymentForm = ({
               }))
             }
             format="DD-MM-YYYY"
+            desktopModeMediaQuery={DATE_PICKER_DESKTOP_QUERY}
             slotProps={{
               textField: {
                 size: 'small',
@@ -4533,6 +3633,7 @@ const CreatePaymentForm = ({
               }))
             }
             format="DD-MM-YYYY"
+            desktopModeMediaQuery={DATE_PICKER_DESKTOP_QUERY}
             slotProps={{
               textField: {
                 size: 'small',

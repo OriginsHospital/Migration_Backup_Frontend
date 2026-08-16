@@ -112,6 +112,9 @@ export const API_ROUTES = {
 
   SAVE_OUTSOURCING_LABTEST_RESULT: '/labs/saveOutsourcingLabTestResult',
   DELETE_OUTSOURCING_LABTEST_RESULT: '/labs/deleteLabOursourcingTestResult',
+  UPLOAD_LAB_PATIENT_IMAGE: '/labs/uploadLabPatientImage',
+  GET_LAB_PATIENT_IMAGES: '/labs/getLabPatientImages',
+  DELETE_LAB_PATIENT_IMAGE: '/labs/deleteLabPatientImage',
 
   GET_LABTESTS_FIELDS: '/labs/labTest/getFields',
   SAVE_LABTEST_FIELD_VALUES: '/labs/saveLabTestFieldValues',

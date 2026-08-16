@@ -42,6 +42,7 @@ import {
 import { Close, Delete } from '@mui/icons-material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import { exportReport } from '@/utils/reportExport'
+import LabPatientImageUpload from '@/components/LabPatientImageUpload'
 
 function TextJoedit({ contents, savedContent }) {
   // const [content, setContent] = useState(contents)
@@ -492,8 +493,18 @@ const UserRelatedTestDetails = ({
   )
 }
 function LabTestCards(props) {
-  const { patientName, appointmentId, labTests, patientPhoto, type, isSpouse } =
-    props?.userInfo
+  const {
+    patientName,
+    appointmentId,
+    labTests,
+    patientPhoto,
+    type,
+    isSpouse,
+    visitType,
+    visitTypeId,
+    ecgImageCount,
+    nstImageCount,
+  } = props?.userInfo
   function handleExpandClicked(id) {
     props.setSelectedId(id)
   }
@@ -515,13 +526,22 @@ function LabTestCards(props) {
         }}
       >
         <AccordionSummary
+          component="div"
           expandIcon={<ExpandMoreIcon />}
           aria-controls="panel1-content"
           id="panel1-header"
-          sx={{ height: '90px' }}
+          sx={{
+            minHeight: '90px',
+            cursor: 'pointer',
+            '& .MuiAccordionSummary-content': {
+              margin: 0,
+              alignItems: 'center',
+              overflow: 'visible',
+            },
+          }}
         >
           <div className="flex justify-between flex-nowrap w-full items-center">
-            <div className="flex items-center w-1/2 gap-3">
+            <div className="flex items-center min-w-0 flex-1 gap-3">
               <Avatar
                 alt={patientName}
                 src={patientPhoto}
@@ -535,7 +555,19 @@ function LabTestCards(props) {
               </span>
             </div>
             {/* <span className="flex-1 ">{appointmentId}</span> */}
-            <span className="capitalize">{type}</span>
+            <div className="flex items-center shrink-0">
+              <LabPatientImageUpload
+                appointmentId={appointmentId}
+                type={type}
+                isSpouse={isSpouse}
+                visitTypeId={visitTypeId}
+                visitType={visitType}
+                category={props?.category}
+                ecgImageCount={ecgImageCount}
+                nstImageCount={nstImageCount}
+              />
+              <span className="capitalize">{type}</span>
+            </div>
           </div>
         </AccordionSummary>
         <AccordionDetails>

@@ -86,21 +86,9 @@ export default function Modal({
       hideBackdrop={false}
       TransitionProps={{
         onExited: () => {
-          // Cleanup on exit - remove body lock
           document.body.style.overflow = ''
           document.body.style.paddingRight = ''
           document.body.classList.remove('MuiModal-open')
-          // Force remove any remaining backdrops
-          setTimeout(() => {
-            const backdrops = document.querySelectorAll(
-              '[class*="MuiBackdrop-root"]',
-            )
-            backdrops.forEach((backdrop) => {
-              if (!backdrop.closest('[role="dialog"]')) {
-                backdrop.remove()
-              }
-            })
-          }, 50)
         },
       }}
     >

@@ -1816,6 +1816,59 @@ export const deleteOutsourcingLabTestResult = async (
   return response.json()
 }
 
+export const uploadLabPatientImages = async (token, formData) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.UPLOAD_LAB_PATIENT_IMAGE}`,
+    {
+      method: 'POST',
+      headers: myHeaders,
+      body: formData,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const getLabPatientImages = async (
+  token,
+  appointmentId,
+  type,
+  imageType,
+) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const imageTypeQuery = imageType ? `&imageType=${imageType}` : ''
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_LAB_PATIENT_IMAGES}?appointmentId=${appointmentId}&type=${type}${imageTypeQuery}`,
+    {
+      method: 'GET',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const deleteLabPatientImage = async (token, imageId) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.DELETE_LAB_PATIENT_IMAGE}/${imageId}`,
+    {
+      method: 'DELETE',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
 export const getSavedLabTestResult = async (
   token,
   type,

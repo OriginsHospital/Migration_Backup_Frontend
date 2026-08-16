@@ -72,6 +72,8 @@ const RESTRICTED_PATIENT_LAB_TESTS = [
   'y-chromosome microdeletion test',
 ]
 
+const RESTRICTED_PATIENT_EMBRYOLOGY = ['semen analysis', 'semen freezing']
+
 const normalizeLabTestName = (testName = '') =>
   testName
     .toLowerCase()
@@ -83,6 +85,23 @@ const isRestrictedPatientLabTest = (testName = '') => {
   return RESTRICTED_PATIENT_LAB_TESTS.some((restrictedTest) =>
     normalizedName.includes(normalizeLabTestName(restrictedTest)),
   )
+}
+
+const isRestrictedPatientEmbryology = (itemName = '') => {
+  const normalizedName = normalizeLabTestName(itemName)
+  return RESTRICTED_PATIENT_EMBRYOLOGY.some((restrictedItem) =>
+    normalizedName.includes(normalizeLabTestName(restrictedItem)),
+  )
+}
+
+const isRestrictedPatientBillItem = (billTypeName, itemName) => {
+  if (billTypeName === 'Lab Test') {
+    return isRestrictedPatientLabTest(itemName)
+  }
+  if (billTypeName === 'Embryology') {
+    return isRestrictedPatientEmbryology(itemName)
+  }
+  return false
 }
 
 const pharmacyStartsWithFilter = (option, inputValue) => {
@@ -719,10 +738,10 @@ function PatientPrescription({
             )
             .filter((item) => {
               const isPatientItem = item.isSpouse === 0
-              const isLabTestBillType = data?.billType?.name === 'Lab Test'
-              const isRestrictedLabTest =
-                isLabTestBillType && isRestrictedPatientLabTest(item.name)
-              return isPatientItem && !isRestrictedLabTest
+              return (
+                isPatientItem &&
+                !isRestrictedPatientBillItem(data?.billType?.name, item.name)
+              )
             })
           tempdefaultData[data.billType.id] = dedupeNonPharmacyLineBillValues(
             billTypeId,
@@ -782,13 +801,13 @@ function PatientPrescription({
               const billTypeId = billTypeData.billType.id
               const updatedArray = billTypeData.billTypeValues
                 .filter((item) => !item.isSpouse) // Filter out spouse items
-                .filter((item) => {
-                  const isLabTestBillType =
-                    billTypeData?.billType?.name === 'Lab Test'
-                  return !(
-                    isLabTestBillType && isRestrictedPatientLabTest(item.name)
-                  )
-                })
+                .filter(
+                  (item) =>
+                    !isRestrictedPatientBillItem(
+                      billTypeData?.billType?.name,
+                      item.name,
+                    ),
+                )
                 .map((item) => ({
                   id: item.id,
                   name: item.name,
@@ -927,9 +946,16 @@ function PatientPrescription({
                         : { value: data.id, label: data.name },
                     ) ?? []
 
-                  if (billType.name === 'Lab Test') {
+                  if (
+                    billType.name === 'Lab Test' ||
+                    billType.name === 'Embryology'
+                  ) {
                     selectOptions = selectOptions.filter(
-                      (option) => !isRestrictedPatientLabTest(option.label),
+                      (option) =>
+                        !isRestrictedPatientBillItem(
+                          billType.name,
+                          option.label,
+                        ),
                     )
                   }
 
