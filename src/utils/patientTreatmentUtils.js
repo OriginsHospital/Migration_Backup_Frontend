@@ -35,6 +35,29 @@ export function resolveActiveTreatmentTypeId({ patientInfo, visitInfo } = {}) {
   return null
 }
 
+export function resolveTreatmentCycleId({
+  treatmentCycleId,
+  patientInfo,
+  selectedPatient,
+} = {}) {
+  const candidates = [
+    treatmentCycleId,
+    selectedPatient?.treatmentCycleId,
+    patientInfo?.treatmentCycleId,
+    patientInfo?.treatmentDetails?.treatmentCycleId,
+    patientInfo?.treatmentDetails?.id,
+  ]
+
+  for (const value of candidates) {
+    const numeric = Number(value)
+    if (Number.isInteger(numeric) && numeric > 0) {
+      return numeric
+    }
+  }
+
+  return null
+}
+
 export function patientHasActiveTreatment({ patientInfo, visitInfo } = {}) {
   return (
     patientHasStartedTreatment(patientInfo) ||

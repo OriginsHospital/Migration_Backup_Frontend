@@ -71,6 +71,7 @@ import {
   getMedicationSheetRowsFromTemplate,
   mergePrescribedMedicationRows,
 } from '@/utils/medicationSheetUtils'
+import { resolveTreatmentCycleId } from '@/utils/patientTreatmentUtils'
 
 const HYSTERO_LAP_TYPE_OPTIONS = [
   { value: 'Hysteroscopy', label: 'Hysteroscopy' },
@@ -118,6 +119,15 @@ function Prescription({
   const modal = useSelector((store) => store.modal)
 
   const queryClient = useQueryClient()
+  const reviewCallTreatmentCycleId = useMemo(
+    () =>
+      resolveTreatmentCycleId({
+        treatmentCycleId,
+        patientInfo,
+        selectedPatient,
+      }),
+    [treatmentCycleId, patientInfo, selectedPatient],
+  )
   // const [treatmentStartDate, setTreatmentStartDate] = useState(
   //   dayjs().format('YYYY-MM-DD'),
   // )
@@ -3324,7 +3334,7 @@ function Prescription({
           appointmentId={appointmentId}
           type={type}
           patientInfo={patientInfo}
-          treatmentCycleId={treatmentCycleId}
+          treatmentCycleId={reviewCallTreatmentCycleId}
           allBillTypeValues={allBillTypeValues}
           // selectedPatient={selectedPatient}
           // setSelectedPatient={setSelectedPatient}

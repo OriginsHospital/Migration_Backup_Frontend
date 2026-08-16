@@ -18,6 +18,7 @@ import dayjs from 'dayjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDispatch, useSelector } from 'react-redux'
 import { closeModal } from '@/redux/modalSlice'
+import { setUser } from '@/redux/userSlice'
 import ReactSelect from 'react-select'
 import {
   getAllAppointmentsReasons,
@@ -25,14 +26,24 @@ import {
   getBillTypeValuesByBillTypeId,
   createOtherAppointmentReason,
   getAvailableConsultationSlots,
+  getNewAccessToken,
 } from '@/constants/apis'
 import { toast } from 'react-toastify'
 import { toastconfig } from '@/utils/toastconfig'
 import RenderPrescriptionPharmacy from './RenderPrescriptionPharmacy'
 import { getMultipleForQuatityCalculation } from '@/constants/utils'
+import { resolveTreatmentCycleId } from '@/utils/patientTreatmentUtils'
 import { Add, Check } from '@mui/icons-material'
 
 const OTHERS_REASON_VALUE = '__others__'
+
+function isAuthFailure(response) {
+  return (
+    Number(response?.status) === 401 ||
+    response?.message === 'Token is Invalid / Expired' ||
+    response?.message === 'Session TimeOut/Expired. Please login again'
+  )
+}
 
 function ReviewTreatmentCall({
   appointmentId,
@@ -66,6 +77,46 @@ function ReviewTreatmentCall({
   const { branches, billTypes } = useSelector((store) => store.dropdowns)
   const [defaultLineBillValues, setDefaultLineBillValues] = useState(null)
   const dispatch = useDispatch()
+
+  const getAuthToken = () => {
+    const storedToken =
+      typeof window !== 'undefined' ? localStorage.getItem('token') : ''
+    return storedToken || userDetails?.accessToken || ''
+  }
+
+  const persistAuthToken = (newToken) => {
+    if (!newToken) return
+    localStorage.setItem('token', newToken)
+    dispatch(
+      setUser({
+        ...userDetails,
+        accessToken: newToken,
+      }),
+    )
+  }
+
+  const refreshAuthToken = async (currentToken) => {
+    const refresh = await getNewAccessToken(currentToken)
+    const newToken = refresh?.data?.accessToken
+    if (refresh?.status !== 200 || !newToken) {
+      return null
+    }
+    persistAuthToken(newToken)
+    return newToken
+  }
+
+  const callWithAuthRetry = async (apiFn, tokenHolder) => {
+    let response = await apiFn(tokenHolder.current)
+    if (!isAuthFailure(response)) {
+      return response
+    }
+    const newToken = await refreshAuthToken(tokenHolder.current)
+    if (!newToken) {
+      return response
+    }
+    tokenHolder.current = newToken
+    return apiFn(newToken)
+  }
 
   const billTypesMap = useMemo(() => {
     const map = {}
@@ -111,21 +162,30 @@ function ReviewTreatmentCall({
     },
   )
 
+  const resolvedTreatmentCycleId = useMemo(
+    () =>
+      resolveTreatmentCycleId({
+        treatmentCycleId,
+        patientInfo,
+      }),
+    [treatmentCycleId, patientInfo],
+  )
+
   const { data: appointmentReasonsList, isLoading: isLoadingReasons } =
     useQuery({
-      queryKey: ['appointmentReasons', treatmentCycleId],
+      queryKey: ['appointmentReasons', resolvedTreatmentCycleId],
       queryFn: async () => {
         const response = await getAllAppointmentsReasons(
           userDetails?.accessToken,
           'Treatment',
-          treatmentCycleId,
+          resolvedTreatmentCycleId,
         )
         if (response.status === 200) {
           return response.data || []
         }
         throw new Error('Error fetching appointment reasons')
       },
-      enabled: !!treatmentCycleId,
+      enabled: !!resolvedTreatmentCycleId,
     })
 
   const resolvedAppointmentReasons = useMemo(() => {
@@ -171,7 +231,7 @@ function ReviewTreatmentCall({
       return [...current, createdReason]
     })
     queryClient.setQueryData(
-      ['appointmentReasons', treatmentCycleId],
+      ['appointmentReasons', resolvedTreatmentCycleId],
       (prev) => {
         const current = Array.isArray(prev) ? prev : []
         if (current.some((reason) => reason.id === createdReason.id)) {
@@ -184,8 +244,13 @@ function ReviewTreatmentCall({
 
   const { mutateAsync: createOtherReasonAsync, isPending: isCreatingReason } =
     useMutation({
-      mutationFn: async (payload) =>
-        createOtherAppointmentReason(userDetails.accessToken, payload),
+      mutationFn: async (payload) => {
+        const tokenHolder = { current: getAuthToken() }
+        return callWithAuthRetry(
+          (token) => createOtherAppointmentReason(token, payload),
+          tokenHolder,
+        )
+      },
     })
 
   function ConvertDataToDBFormat() {
@@ -251,10 +316,18 @@ function ReviewTreatmentCall({
   // Book appointment mutation
   const bookAppointment = useMutation({
     mutationFn: async (payload) => {
-      const res = await bookReviewTreatmentCall(
-        userDetails.accessToken,
-        payload,
+      const tokenHolder = { current: getAuthToken() }
+      const res = await callWithAuthRetry(
+        (token) => bookReviewTreatmentCall(token, payload),
+        tokenHolder,
       )
+      if (isAuthFailure(res)) {
+        toast.error(
+          'Your session expired. Please log in again and retry.',
+          toastconfig,
+        )
+        return res
+      }
       if (res.status === 200) {
         toast.success(res.message, toastconfig)
         dispatch(closeModal('reviewTreatmentCall'))
@@ -274,6 +347,14 @@ function ReviewTreatmentCall({
       !reviewForm.appointmentReasonId
     ) {
       toast.error('Please fill all required fields', toastconfig)
+      return
+    }
+
+    if (!resolvedTreatmentCycleId) {
+      toast.error(
+        'Treatment cycle is missing for this patient. Please open the treatment appointment and try again.',
+        toastconfig,
+      )
       return
     }
 
@@ -312,6 +393,13 @@ function ReviewTreatmentCall({
             patientId,
             isSpouse: newReason.isSpouse ? 1 : 0,
           })
+          if (isAuthFailure(response)) {
+            toast.error(
+              'Your session expired. Please log in again and retry.',
+              toastconfig,
+            )
+            return
+          }
           const createdReasonId = response?.data?.appointmentReasonId
           if (response?.status !== 200 || !createdReasonId) {
             toast.error(
@@ -342,19 +430,19 @@ function ReviewTreatmentCall({
     }
 
     const payload = {
-      currentAppointmentId: appointmentId,
+      currentAppointmentId: Number(appointmentId),
       type: type,
       date: reviewForm.date,
-      doctorId: userDetails?.id,
+      doctorId: Number(userDetails?.id),
       timeStart: reviewForm.timeslot.split('-')[0].trim(),
       timeEnd: reviewForm.timeslot.split('-')[1].trim(),
-      treatmentCycleId: treatmentCycleId,
-      appointmentReasonId,
+      treatmentCycleId: resolvedTreatmentCycleId,
+      appointmentReasonId: Number(appointmentReasonId),
       hasAnyFuturePrescription: reviewForm.hasAnyFuturePrescription,
       lineBillEntries: reviewForm.hasAnyFuturePrescription
         ? ConvertDataToDBFormat()
         : [],
-      branchId: reviewForm?.branchId,
+      branchId: Number(reviewForm?.branchId),
     }
 
     bookAppointment.mutate(payload)

@@ -444,6 +444,7 @@ export const API_ROUTES = {
   GET_INBOX_ITEMS: '/inbox',
   GET_ACTIVE_STAFF: '/tickets/staff/active',
   APPLY_OPT_OUT: '/appointments/applyOptOut',
+  DELETE_LINE_BILL_ITEM: '/appointments/deleteLineBillItem',
 
   TREATMENT_CYCLES_REPORT: '/reports/treatmentCyclesPaymentsReport',
   PATIENT_MILESTONES_REPORT: '/reports/treatmentCyclesReport',

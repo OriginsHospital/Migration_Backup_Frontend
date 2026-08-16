@@ -41,6 +41,7 @@ import {
   applyOptOut,
   createVitalsDetails,
   deleteAppointment,
+  deleteLineBillItem,
   downloadOPDSheet,
   downloadPDF,
   editAppointment,
@@ -117,6 +118,7 @@ import {
   getAppointmentModalKey,
   getLineBillsQueryKey,
 } from '@/utils/appointmentKeys'
+import { hasBillingItemDeleteAccess } from '@/utils/billingItemDeleteAccess'
 
 import dynamic from 'next/dynamic'
 import { ArrowBack } from '@mui/icons-material'
@@ -3162,6 +3164,7 @@ const BillTypePanel = React.memo(
     })
     const user = useSelector((store) => store.user)
     const queryClient = useQueryClient()
+    const canDeleteBillingItem = hasBillingItemDeleteAccess(user)
 
     // Initialize items on component mount or when bill changes
     useEffect(() => {
@@ -3245,6 +3248,43 @@ const BillTypePanel = React.memo(
       if (window.confirm('Are you sure you want to undo the opt-out status?')) {
         optOutMutation.mutate({ ids: [refId], isOptOut: 0 })
       }
+    }
+
+    const deleteLineBillMutation = useMutation({
+      mutationFn: async ({ id }) => {
+        const response = await deleteLineBillItem(user.accessToken, {
+          id,
+          appointmentId: bill.appointmentId,
+          type: bill.type,
+        })
+        if (response.status !== 200)
+          throw new Error(response.message || 'Failed to delete billing item')
+        return response.data
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: getLineBillsQueryKey(bill),
+        })
+        toast.success('Billing item deleted successfully', toastconfig)
+      },
+      onError: (error) => {
+        toast.error(
+          'Failed to delete billing item: ' + error.message,
+          toastconfig,
+        )
+      },
+    })
+
+    const handleDeleteBillingItem = (item) => {
+      if (!item?.refId) return
+      if (
+        !window.confirm(
+          `Are you sure you want to delete "${item.name}" from this bill? This cannot be undone.`,
+        )
+      ) {
+        return
+      }
+      deleteLineBillMutation.mutate({ id: item.refId })
     }
 
     // Calculate totals ONLY for selected due items
@@ -3361,11 +3401,16 @@ const BillTypePanel = React.memo(
                     ) : (
                       <TableCell className="font-semibold">Amount</TableCell>
                     )}
+                    {canDeleteBillingItem && (
+                      <TableCell className="font-semibold" align="right">
+                        Action
+                      </TableCell>
+                    )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredDueItems.map((value) => (
-                    <TableRow key={value.id}>
+                    <TableRow key={value.refId || value.id}>
                       {bill.billType?.id !== 3 && (
                         <TableCell padding="checkbox">
                           <Checkbox
@@ -3393,6 +3438,25 @@ const BillTypePanel = React.memo(
                         <TableCell>{value?.prescribedQuantity}</TableCell>
                       ) : (
                         <TableCell>₹{value.amount}</TableCell>
+                      )}
+                      {canDeleteBillingItem && (
+                        <TableCell align="right">
+                          {value.refId ? (
+                            <Tooltip title="Delete item">
+                              <span>
+                                <IconButton
+                                  color="error"
+                                  size="small"
+                                  aria-label={`Delete ${value.name}`}
+                                  disabled={deleteLineBillMutation.isPending}
+                                  onClick={() => handleDeleteBillingItem(value)}
+                                >
+                                  <FiTrash />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          ) : null}
+                        </TableCell>
                       )}
                     </TableRow>
                   ))}
