@@ -9,7 +9,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { Add, Close, DeleteOutlined, EditNote } from '@mui/icons-material'
+import {
+  Add,
+  Close,
+  DeleteOutlined,
+  EditNote,
+  ContentCopy,
+} from '@mui/icons-material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDispatch } from 'react-redux'
 import FilteredDataGrid from './FilteredDataGrid'
@@ -30,7 +36,7 @@ import {
 
 const EMPTY_MEDICINE = { name: '', quantity: 1 }
 
-function PharmacyKitMasterPanel({ accessToken }) {
+function PharmacyKitMasterPanel({ accessToken, onCloneClick }) {
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
   const [formState, setFormState] = useState({
@@ -217,7 +223,16 @@ function PharmacyKitMasterPanel({ accessToken }) {
 
   return (
     <div className="h-full max-w-[calc(100vw-550px)]">
-      <div className="flex justify-end mb-3">
+      <div className="flex justify-end mb-3 gap-2">
+        {onCloneClick && (
+          <Button
+            variant="outlined"
+            startIcon={<ContentCopy />}
+            onClick={onCloneClick}
+          >
+            Clone
+          </Button>
+        )}
         <Button
           variant="outlined"
           startIcon={<Add />}

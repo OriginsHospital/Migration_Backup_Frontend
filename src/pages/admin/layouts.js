@@ -36,10 +36,12 @@ import StairsIcon from '@mui/icons-material/Stairs'
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'
 import HotelIcon from '@mui/icons-material/Hotel'
 import CloseIcon from '@mui/icons-material/Close'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { useSelector } from 'react-redux'
 import { useRouter } from 'next/router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Breadcrumb from '@/components/Breadcrumb'
+import MasterDataCloneDialog from '@/components/MasterDataCloneDialog'
 import { withPermission } from '@/components/withPermission'
 import { ACCESS_TYPES } from '@/constants/constants'
 import {
@@ -167,6 +169,7 @@ const LayoutsPage = () => {
     id: null,
     name: '',
   })
+  const [cloneOpen, setCloneOpen] = useState(false)
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -732,6 +735,13 @@ const LayoutsPage = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={<ContentCopyIcon />}
+            onClick={() => setCloneOpen(true)}
+          >
+            Clone
+          </Button>
           <Button
             variant="contained"
             onClick={() =>
@@ -2054,6 +2064,18 @@ const LayoutsPage = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      <MasterDataCloneDialog
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        accessToken={user?.accessToken}
+        defaultCloneTypes={['layouts']}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['buildings'] })
+          queryClient.invalidateQueries({ queryKey: ['floors'] })
+          queryClient.invalidateQueries({ queryKey: ['rooms'] })
+          queryClient.invalidateQueries({ queryKey: ['beds'] })
+        }}
+      />
     </Box>
   )
 }

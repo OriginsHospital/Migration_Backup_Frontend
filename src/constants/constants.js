@@ -406,6 +406,8 @@ export const API_ROUTES = {
   GET_ALL_BRANCHES_MASTER: '/masterData/branches/getAllBranches',
   ADD_NEW_BRANCH_MASTER: '/masterData/branches/addBranch',
   EDIT_BRANCH_MASTER: '/masterData/branches/editBranch',
+  PREVIEW_CLONE_MASTER_DATA: '/masterData/clone/preview',
+  CLONE_MASTER_DATA: '/masterData/clone',
 
   GET_APPOINTMENTS_BY_PATIENT: '/doctors/getAppointmentsByPatient',
   APPLY_MARK_AS_SEEN_FOR_DOCTOR_APPOINTMENT:

@@ -41,6 +41,7 @@ import {
   EditOutlined,
   DocumentScannerOutlined,
   Close,
+  ContentCopy,
 } from '@mui/icons-material'
 import { withPermission } from '@/components/withPermission'
 import { useRouter } from 'next/router'
@@ -49,6 +50,10 @@ import { DatePicker } from '@mui/x-date-pickers'
 import { toast } from 'react-toastify'
 import { toastconfig } from '@/utils/toastconfig'
 import SearchIcon from '@mui/icons-material/Search'
+import MasterDataCloneDialog, {
+  DEFAULT_CLONE_TYPES,
+  TAB_TO_CLONE_TYPE,
+} from '@/components/MasterDataCloneDialog'
 
 const VENDOR_DEPARTMENTS = [
   'Pharmacy',
@@ -1477,6 +1482,8 @@ const tabs = {
 function Managefields() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
+  const [cloneOpen, setCloneOpen] = useState(false)
+  const [cloneTypes, setCloneTypes] = useState(DEFAULT_CLONE_TYPES)
   const [selectedTab, setSelectedTab] = useState(() => {
     return (
       router.query.tab ||
@@ -1865,6 +1872,18 @@ function Managefields() {
       )
   }, [searchQuery])
 
+  const getCloneTypesForTab = (tab = selectedTab) => {
+    if (TAB_TO_CLONE_TYPE[tab]) {
+      return [TAB_TO_CLONE_TYPE[tab]]
+    }
+    return DEFAULT_CLONE_TYPES
+  }
+
+  const handleOpenClone = (types) => {
+    setCloneTypes(types?.length ? types : getCloneTypesForTab())
+    setCloneOpen(true)
+  }
+
   const handleOpenCreateModal = () => {
     if (tabs[selectedTab]?.useCustomPanel || !tabs[selectedTab]?.createFields) {
       return
@@ -1897,6 +1916,15 @@ function Managefields() {
             >
               Floors, rooms & beds
             </Typography>
+            <Button
+              fullWidth
+              variant="outlined"
+              className="mt-2"
+              startIcon={<ContentCopy />}
+              onClick={() => handleOpenClone(getCloneTypesForTab())}
+            >
+              Clone to Branch
+            </Button>
           </div>
 
           {/* Add the search input */}
@@ -1984,11 +2012,20 @@ function Managefields() {
                 {tabs[tab]?.useCustomPanel ? (
                   <PharmacyKitMasterPanel
                     accessToken={userDetails?.accessToken}
+                    onCloneClick={() => handleOpenClone(DEFAULT_CLONE_TYPES)}
                   />
                 ) : (
                   <>
                     <div>
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outlined"
+                          className="mb-3"
+                          startIcon={<ContentCopy />}
+                          onClick={() => handleOpenClone()}
+                        >
+                          Clone
+                        </Button>
                         <Button
                           variant="outlined"
                           className="mb-3"
@@ -2014,6 +2051,15 @@ function Managefields() {
               </TabPanel>
             ))}
           <TabPanel value={'categories'}>
+            <div className="flex justify-end mb-3">
+              <Button
+                variant="outlined"
+                startIcon={<ContentCopy />}
+                onClick={() => handleOpenClone(DEFAULT_CLONE_TYPES)}
+              >
+                Clone
+              </Button>
+            </div>
             <div className="">
               {dropdowns?.expenseCategories?.map((each) => {
                 return (
@@ -2177,6 +2223,21 @@ function Managefields() {
           </div>
         </div>
       </Modal>
+      <MasterDataCloneDialog
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        accessToken={userDetails?.accessToken}
+        defaultCloneTypes={cloneTypes}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['pharmacyMasterData'] })
+          queryClient.invalidateQueries({ queryKey: ['pharmacyKitMasterData'] })
+          queryClient.invalidateQueries({ queryKey: [selectedTab] })
+          queryClient.invalidateQueries({ queryKey: ['buildings'] })
+          queryClient.invalidateQueries({ queryKey: ['floors'] })
+          queryClient.invalidateQueries({ queryKey: ['rooms'] })
+          queryClient.invalidateQueries({ queryKey: ['beds'] })
+        }}
+      />
     </div>
   )
 }
