@@ -1,5 +1,6 @@
 import { useSelector } from 'react-redux'
 import { Redirect } from './Redirect'
+import { hasPharmacistFeatureAccess } from '@/utils/pharmacistExpertAccess'
 
 export function withPermission(
   Component,
@@ -10,9 +11,12 @@ export function withPermission(
   function Wrapper(props) {
     // For some modules permissions are not required, they should be visible for all roles
     // console.log(relatedModuleName, requiredPermissions);
-    const user = useSelector(store => store.user)
+    const user = useSelector((store) => store.user)
+    if (hasPharmacistFeatureAccess(user, relatedModuleName)) {
+      return <Component {...props} />
+    }
     const userModule = user.moduleList?.find(
-      eachModuleObj => eachModuleObj.enum == relatedModuleName,
+      (eachModuleObj) => eachModuleObj.enum == relatedModuleName,
     )
     const userPermission = userModule?.accessType
     // console.log(userModule)
@@ -30,9 +34,12 @@ export function withPermission(
 }
 
 export const usePermissionCheck = (moduleName, requiredPermissions) => {
-  const user = useSelector(store => store.user)
+  const user = useSelector((store) => store.user)
+  if (hasPharmacistFeatureAccess(user, moduleName)) {
+    return true
+  }
   const userModule = user.moduleList?.find(
-    eachModuleObj => eachModuleObj.enum === moduleName,
+    (eachModuleObj) => eachModuleObj.enum === moduleName,
   )
   const userPermission = userModule?.accessType
 

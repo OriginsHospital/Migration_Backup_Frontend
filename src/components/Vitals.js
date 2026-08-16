@@ -17,14 +17,39 @@ function Vitals({
   const user = useSelector((store) => store.user)
   const [isEditing, setIsEditing] = useState(false)
 
+  const visitTypeText = [
+    patientDetails?.visitType,
+    patientDetails?.appointmentReason,
+    patientDetails?.appointmentType,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .trim()
+  const hideSpouseVitals =
+    visitTypeText.includes('gynec') ||
+    visitTypeText.includes('gynae') ||
+    visitTypeText.includes('gyn') ||
+    visitTypeText.includes('antenatal') ||
+    visitTypeText.includes('anc/zyn') ||
+    visitTypeText.includes('anc')
+
   const handleSubmit = (e) => {
     e.preventDefault()
+    const payload = hideSpouseVitals
+      ? {
+          ...vitalsData,
+          spouseWeight: '',
+          spouseHeight: '',
+          spouseBmi: '',
+        }
+      : vitalsData
     if (vitalsData?.id) {
-      editVitalsMutation.mutate({ ...vitalsData, initials: user?.userName })
+      editVitalsMutation.mutate({ ...payload, initials: user?.userName })
       setIsEditing(false)
     } else {
       createVitalsMutation.mutate({
-        ...vitalsData,
+        ...payload,
         doctorId: patientDetails?.doctorId,
         patientId: patientDetails?.patientId,
         appointmentId: patientDetails?.appointmentId,
@@ -52,10 +77,14 @@ function Vitals({
   }
 
   useEffect(() => {
-    if (vitalsData?.spouseWeight && vitalsData?.spouseHeight) {
+    if (
+      !hideSpouseVitals &&
+      vitalsData?.spouseWeight &&
+      vitalsData?.spouseHeight
+    ) {
       calculateSpouseBMI()
     }
-  }, [vitalsData?.spouseWeight, vitalsData?.spouseHeight])
+  }, [hideSpouseVitals, vitalsData?.spouseWeight, vitalsData?.spouseHeight])
 
   const calculateSpouseBMI = () => {
     const bmi =
@@ -157,38 +186,46 @@ function Vitals({
             }}
             required
           />
-          <TextField
-            label="Spouse Weight"
-            value={vitalsData?.spouseWeight || ''}
-            name="spouseWeight"
-            // type="number"
-            onChange={handleVitalsChange}
-            InputProps={{
-              endAdornment: <InputAdornment position="end">kg</InputAdornment>,
-            }}
-          />
-          <TextField
-            label="Spouse Height"
-            value={vitalsData?.spouseHeight || ''}
-            name="spouseHeight"
-            // type="number"
-            onChange={handleVitalsChange}
-            InputProps={{
-              endAdornment: <InputAdornment position="end">cm</InputAdornment>,
-            }}
-          />
-          <TextField
-            label="Spouse BMI"
-            value={vitalsData?.spouseBmi || ''}
-            name="spouseBmi"
-            // type="number"
-            onChange={handleVitalsChange}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">kg/m²</InputAdornment>
-              ),
-            }}
-          />
+          {!hideSpouseVitals && (
+            <>
+              <TextField
+                label="Spouse Weight"
+                value={vitalsData?.spouseWeight || ''}
+                name="spouseWeight"
+                // type="number"
+                onChange={handleVitalsChange}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">kg</InputAdornment>
+                  ),
+                }}
+              />
+              <TextField
+                label="Spouse Height"
+                value={vitalsData?.spouseHeight || ''}
+                name="spouseHeight"
+                // type="number"
+                onChange={handleVitalsChange}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">cm</InputAdornment>
+                  ),
+                }}
+              />
+              <TextField
+                label="Spouse BMI"
+                value={vitalsData?.spouseBmi || ''}
+                name="spouseBmi"
+                // type="number"
+                onChange={handleVitalsChange}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">kg/m²</InputAdornment>
+                  ),
+                }}
+              />
+            </>
+          )}
           {/* <TextField
                         label="Pulse"
                         value={vitalsData?.pulse || ''}

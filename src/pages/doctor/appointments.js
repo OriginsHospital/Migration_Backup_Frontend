@@ -161,6 +161,22 @@ function TextJoedit({ placeholder, contents, onBlur }) {
     />
   )
 }
+function isAntenatalVisitType(selectedPatient, patientInfo) {
+  const visitTypeId =
+    selectedPatient?.visitTypeId ?? patientInfo?.visitTypeId ?? null
+  const visitTypeName = String(
+    selectedPatient?.visitType || patientInfo?.visitType || '',
+  ).toLowerCase()
+  const appointmentReason = String(
+    selectedPatient?.appointmentReason || '',
+  ).toLowerCase()
+  return (
+    Number(visitTypeId) === 2 ||
+    visitTypeName.includes('antenatal') ||
+    appointmentReason === 'antenatal'
+  )
+}
+
 export function PatientDetails({
   patientInfo,
   selectedPatient,
@@ -1171,6 +1187,11 @@ export default function Appointments() {
     selectedPatient?.treatmentCycleId,
   ])
 
+  const showDischargeCard = isAntenatalVisitType(
+    selectedPatient,
+    patientDetails?.patientInfo,
+  )
+
   const sheetTreatmentCycleId =
     activeHistoryTreatmentCycleId || selectedPatient?.treatmentCycleId
 
@@ -1904,13 +1925,15 @@ export default function Appointments() {
                         Discharge Summary
                       </Button>
                     )}
-                    <Button
-                      variant="outlined"
-                      className="text-secondary capitalize col-span-3 "
-                      onClick={() => dispatch(openModal('DischargeCard'))}
-                    >
-                      Discharge Card
-                    </Button>
+                    {showDischargeCard && (
+                      <Button
+                        variant="outlined"
+                        className="text-secondary capitalize col-span-3 "
+                        onClick={() => dispatch(openModal('DischargeCard'))}
+                      >
+                        Discharge Card
+                      </Button>
+                    )}
                     {patientDetails?.patientInfo?.activeVisitId && (
                       <Button
                         variant="outlined"
@@ -1930,13 +1953,15 @@ export default function Appointments() {
                 )}
                 {selectedPatient?.type === 'Consultation' && (
                   <div className="flex gap-3">
-                    <Button
-                      variant="outlined"
-                      className="text-secondary capitalize"
-                      onClick={() => dispatch(openModal('DischargeCard'))}
-                    >
-                      Discharge Card
-                    </Button>
+                    {showDischargeCard && (
+                      <Button
+                        variant="outlined"
+                        className="text-secondary capitalize"
+                        onClick={() => dispatch(openModal('DischargeCard'))}
+                      >
+                        Discharge Card
+                      </Button>
+                    )}
                     {patientDetails?.patientInfo?.activeVisitId && (
                       <Button
                         variant="outlined"

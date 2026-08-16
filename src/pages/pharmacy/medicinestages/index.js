@@ -61,6 +61,7 @@ import {
 } from '@mui/icons-material'
 import { withPermission } from '@/components/withPermission'
 import { ACCESS_TYPES } from '@/constants/constants'
+import { isPharmacistLike } from '@/utils/pharmacistExpertAccess'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline'
 import { useRouter } from 'next/router'
 const columns = [
@@ -68,22 +69,6 @@ const columns = [
   { label: 'PACKED' },
   { label: 'PAID' },
 ]
-
-const PHARMACIST_ROLE_ID = 3
-
-const isPharmacistRole = (roleDetails) => {
-  const roleName = (
-    roleDetails?.roleName ||
-    roleDetails?.name ||
-    roleDetails?.role ||
-    ''
-  )
-    .toString()
-    .toLowerCase()
-  return (
-    roleDetails?.id === PHARMACIST_ROLE_ID || roleName.includes('pharmacist')
-  )
-}
 const toastconfig = {
   position: 'top-right',
   autoClose: 800,
@@ -905,7 +890,7 @@ function RenderAccordianDetails({
   })
 
   const canMoveBackToPrescribed =
-    column.label === 'PACKED' && isPharmacistRole(user?.roleDetails)
+    column.label === 'PACKED' && isPharmacistLike(user)
 
   const moveToPrescribedMutation = useMutation({
     mutationFn: async (payload) => {
