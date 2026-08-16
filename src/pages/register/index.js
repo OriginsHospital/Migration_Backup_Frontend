@@ -34,6 +34,7 @@ function Register() {
   const [otpSent, setOtpSent] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [resendSeconds, setResendSeconds] = useState(0)
 
   const isValidAadhaar = (value) => {
     if (!/^\d{12}$/.test(value)) {
@@ -170,28 +171,11 @@ function Register() {
         }
       } else {
         // If OTP is not sent, send OTP
-        const res = await fetch(
-          process.env.NEXT_PUBLIC_API_BASE_URL + API_ROUTES.SEND_OTP,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: values.email,
-              aadhaarNo: values.aadhaarNo,
-              userName: values.userName,
-              fullName: values.fullName,
-              password: values.password,
-              confirmPassword: values.confirmPassword,
-            }),
-          },
-        )
-        // console.log('response',)
-        const response = await res.json()
+        const response = await sendOtpRequest(values)
         if (response.status == 200) {
           setOtpSent(true)
-          toast.success('OTP sent successfully', toastconfig)
+          setResendSeconds(60)
+          toast.success('OTP sent successfully to your email', toastconfig)
           setSubmitting(false)
         }
         // otp sent already
@@ -201,13 +185,13 @@ function Register() {
             'OTP ALREADY SENT. Please Verify/Resend after sometime'
         ) {
           setOtpSent(true)
+          setResendSeconds(60)
           toast.error('OTP already sent', toastconfig)
           setSubmitting(false)
         } else {
           const errorData = response
           toast.error(errorData?.message || 'Failed to send OTP', toastconfig)
           throw new Error(errorData?.message || 'Failed to send OTP')
-          setSubmitting(false)
         }
       }
     } catch (error) {
@@ -222,6 +206,53 @@ function Register() {
   useEffect(() => {
     console.log('drop', dropdowns)
   }, [dropdowns])
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined
+    const timer = setTimeout(() => {
+      setResendSeconds((seconds) => seconds - 1)
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [resendSeconds])
+
+  const sendOtpRequest = async (values) => {
+    const res = await fetch(
+      process.env.NEXT_PUBLIC_API_BASE_URL + API_ROUTES.SEND_OTP,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: values.email,
+          aadhaarNo: values.aadhaarNo,
+          userName: values.userName,
+          fullName: values.fullName,
+          password: values.password,
+          confirmPassword: values.confirmPassword,
+        }),
+      },
+    )
+    return res.json()
+  }
+
+  const handleResendOtp = async (values) => {
+    if (resendSeconds > 0) return
+    try {
+      const response = await sendOtpRequest(values)
+      if (response.status == 200) {
+        setResendSeconds(60)
+        toast.success('OTP resent to your email', toastconfig)
+      } else {
+        toast.error(response?.message || 'Failed to resend OTP', toastconfig)
+      }
+    } catch (error) {
+      toast.error(
+        error.message || 'Failed to resend OTP. Please try again later',
+        toastconfig,
+      )
+    }
+  }
 
   const handleOtpChange = (e, index, setFieldValue, values) => {
     const value = e.target.value
@@ -279,7 +310,7 @@ function Register() {
               validationSchema={validationSchema}
               onSubmit={onSubmit}
             >
-              {({ isSubmitting, setFieldValue }) => (
+              {({ isSubmitting, setFieldValue, values }) => (
                 <Form className="space-y-3">
                   {/* Form Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -530,8 +561,18 @@ function Register() {
                           className="text-rose-500 text-xs mt-2"
                         />
                         <p className="text-sm text-gray-500 mt-2">
-                          Enter the 6-digit code sent to your email
+                          Enter the 6-digit code sent to {values.email}
                         </p>
+                        <button
+                          type="button"
+                          disabled={resendSeconds > 0}
+                          onClick={() => handleResendOtp(values)}
+                          className="text-sm font-medium text-secondary hover:text-secondary/80 disabled:text-gray-400 disabled:cursor-not-allowed mt-2"
+                        >
+                          {resendSeconds > 0
+                            ? `Resend OTP in ${resendSeconds}s`
+                            : 'Resend OTP'}
+                        </button>
                       </div>
                     )}
                   </div>

@@ -274,6 +274,14 @@ function IPModule() {
               onClick={() => {
                 setBillingRow(params.row)
                 setPaymentMode('CASH')
+                setCollectForm({
+                  roomAmount: '',
+                  medicineAmount: '',
+                  packageAmount: '',
+                  otherAmount: '',
+                  otherDescription: '',
+                  remarks: '',
+                })
               }}
             >
               <BillingIcon fontSize="small" />
@@ -511,7 +519,21 @@ function IPModule() {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell>Medicines bill</TableCell>
+                    <TableCell>
+                      Medicines bill
+                      <Typography
+                        variant="caption"
+                        display="block"
+                        color="text.secondary"
+                      >
+                        Auto-fetched from IP Indent
+                        {billing.medicines?.length
+                          ? ` · ${billing.medicines.length} item${
+                              billing.medicines.length === 1 ? '' : 's'
+                            }`
+                          : ' · no indent items for this stay'}
+                      </Typography>
+                    </TableCell>
                     <TableCell align="right">
                       ₹{money(billing.billed.medicine)}
                     </TableCell>
@@ -561,15 +583,16 @@ function IPModule() {
                 </TableBody>
               </Table>
 
-              {billing.medicines?.length > 0 && (
-                <>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    Medicines
-                  </Typography>
+              <>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  IP Indent pharmacy items
+                </Typography>
+                {billing.medicines?.length > 0 ? (
                   <Table size="small">
                     <TableHead>
                       <TableRow>
                         <TableCell>Item</TableCell>
+                        <TableCell>Prescribed on</TableCell>
                         <TableCell align="right">Qty</TableCell>
                         <TableCell align="right">Rate</TableCell>
                         <TableCell align="right">Amount</TableCell>
@@ -581,6 +604,11 @@ function IPModule() {
                           <TableCell>
                             {item.itemName || `Item ${item.id}`}
                           </TableCell>
+                          <TableCell>
+                            {item.prescribedOn
+                              ? dayjs(item.prescribedOn).format('DD MMM YYYY')
+                              : '-'}
+                          </TableCell>
                           <TableCell align="right">{item.quantity}</TableCell>
                           <TableCell align="right">
                             ₹{money(item.unitPrice)}
@@ -590,10 +618,22 @@ function IPModule() {
                           </TableCell>
                         </TableRow>
                       ))}
+                      <TableRow>
+                        <TableCell colSpan={4} sx={{ fontWeight: 700 }}>
+                          Medicines total
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>
+                          ₹{money(billing.billed.medicine)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
-                </>
-              )}
+                ) : (
+                  <Alert severity="info">
+                    No pharmacy items found in IP Indent for this patient.
+                  </Alert>
+                )}
+              </>
 
               <Divider />
 
@@ -620,6 +660,7 @@ function IPModule() {
                     fullWidth
                     type="number"
                     label="Medicines bill"
+                    helperText="From this patient's IP Indent"
                     value={collectForm.medicineAmount}
                     onChange={(e) =>
                       setCollectForm((prev) => ({

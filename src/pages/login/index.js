@@ -30,7 +30,7 @@ function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const dispatch = useDispatch()
-  const user = useSelector(state => state.user)
+  const user = useSelector((state) => state.user)
   const router = useRouter()
 
   const initialValues = {
@@ -53,7 +53,6 @@ function Login() {
     const loginApiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.LOGIN}`
     var myHeaders = new Headers()
     myHeaders.append('Content-Type', 'application/json')
-    myHeaders.append('Access-Control-Allow-Origin', '*')
     var raw = JSON.stringify({
       email: email,
       password: password,
@@ -67,10 +66,10 @@ function Login() {
     }
 
     fetch(loginApiUrl, requestOptions)
-      .then(response => {
+      .then((response) => {
         return response.json()
       })
-      .then(async result => {
+      .then(async (result) => {
         console.log('res:', result)
         if (result.status === 400 || result.status === 404) {
           if (result.message === 'Session Already Exists, Please Logout') {
@@ -134,10 +133,10 @@ function Login() {
           }
         }
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Error:', error)
         toast.error(
-          'An error occurred while logging in. Please try again later.',
+          'Unable to reach the server. Please try again later.',
           toastconfig,
         )
         setSubmitting(false)

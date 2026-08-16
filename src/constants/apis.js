@@ -18,8 +18,6 @@ export const getLoggedUserInfo = async (token) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
-  myHeaders.append('Access-Control-Allow-Origin', '*')
-  myHeaders.append('Access-Control-Allow-Credentials', true)
 
   const response = await fetch(
     process.env.NEXT_PUBLIC_API_BASE_URL + API_ROUTES.LOGGED_USER_INFO,
@@ -37,8 +35,6 @@ export const getNewAccessToken = async (token) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
-  myHeaders.append('Access-Control-Allow-Origin', '*')
-  myHeaders.append('Access-Control-Allow-Credentials', true)
 
   const response = await fetch(
     process.env.NEXT_PUBLIC_API_BASE_URL + API_ROUTES.GET_NEW_ACCESS_TOKEN,
@@ -57,8 +53,6 @@ export const getUsersList = async (token, isvalidusers) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
-  // myHeaders.append("Access-Control-Allow-Origin", "*");
-  myHeaders.append('Access-Control-Allow-Credential', 'true')
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.USERS_LIST}?page=${1}`,
     {
@@ -92,7 +86,6 @@ export const getValidUsersList = async (token) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
-  myHeaders.append('Access-Control-Allow-Credential', 'true')
 
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_VALID_USERS}`,
@@ -204,7 +197,6 @@ export const deleteUser = async (token, userId) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
-  myHeaders.append('Access-Control-Allow-Credential', 'true')
 
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.DELETE_USER}/${userId}`,
