@@ -1195,6 +1195,34 @@ export default function Appointments() {
   const sheetTreatmentCycleId =
     activeHistoryTreatmentCycleId || selectedPatient?.treatmentCycleId
 
+  const dischargeCardVisitId =
+    selectedPatient?.visit_id ||
+    selectedPatient?.visitId ||
+    patientDetails?.patientInfo?.activeVisitId
+
+  const dischargeCardPatientInfo = useMemo(
+    () => ({
+      ...(patientDetails?.patientInfo || {}),
+      id: patientDetails?.patientInfo?.id,
+      doctorName: selectedPatient?.doctorName,
+      spouseName:
+        patientDetails?.patientInfo?.spouseName || selectedPatient?.spouseName,
+      visitId: dischargeCardVisitId,
+      appointmentId: selectedPatient?.appointmentId,
+      appointmentType: selectedPatient?.type,
+      treatmentCycleId: sheetTreatmentCycleId,
+    }),
+    [
+      patientDetails?.patientInfo,
+      selectedPatient?.doctorName,
+      selectedPatient?.spouseName,
+      selectedPatient?.appointmentId,
+      selectedPatient?.type,
+      dischargeCardVisitId,
+      sheetTreatmentCycleId,
+    ],
+  )
+
   const [searchTab, setSearchTab] = useState('date') // 'date' or 'patient'
   const [selectedSearchPatient, setSelectedSearchPatient] = useState(null)
   const [patientSearchQuery, setPatientSearchQuery] = useState('')
@@ -2010,25 +2038,8 @@ export default function Appointments() {
                   closeOnOutsideClick={true}
                 >
                   <DischargeCard
-                    patientInfo={{
-                      ...patientDetails?.patientInfo,
-                      doctorName: selectedPatient?.doctorName,
-                      spouseName:
-                        patientDetails?.patientInfo?.spouseName ||
-                        selectedPatient?.spouseName,
-                      visitId:
-                        selectedPatient?.visit_id ||
-                        selectedPatient?.visitId ||
-                        patientDetails?.patientInfo?.activeVisitId,
-                      appointmentId: selectedPatient?.appointmentId,
-                      appointmentType: selectedPatient?.type,
-                      treatmentCycleId: sheetTreatmentCycleId,
-                    }}
-                    visitId={
-                      selectedPatient?.visit_id ||
-                      selectedPatient?.visitId ||
-                      patientDetails?.patientInfo?.activeVisitId
-                    }
+                    patientInfo={dischargeCardPatientInfo}
+                    visitId={dischargeCardVisitId}
                     appointmentId={selectedPatient?.appointmentId}
                     appointmentType={selectedPatient?.type}
                     treatmentCycleId={sheetTreatmentCycleId}

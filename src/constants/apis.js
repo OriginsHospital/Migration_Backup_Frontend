@@ -2825,12 +2825,15 @@ export const getDischargeCardsByDate = async (token, date, branchId) => {
   return response.json()
 }
 
-export const getDischargeCard = async (token, visitId) => {
+export const getDischargeCard = async (token, visitId, patientId) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
+  const query = new URLSearchParams()
+  if (visitId) query.append('visitId', visitId)
+  if (patientId) query.append('patientId', patientId)
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_DISCHARGE_CARD}?visitId=${visitId}`,
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_DISCHARGE_CARD}?${query.toString()}`,
     {
       method: 'GET',
       headers: myHeaders,

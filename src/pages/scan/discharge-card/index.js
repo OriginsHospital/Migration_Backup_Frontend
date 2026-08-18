@@ -152,9 +152,13 @@ function ScanDischargeCardPage() {
   const openDischargeCard = useCallback(
     async (row, mode) => {
       let savedCardData = null
-      if (row?.visitId) {
+      if (row?.visitId || row?.patientId) {
         try {
-          const response = await getDischargeCard(user.accessToken, row.visitId)
+          const response = await getDischargeCard(
+            user.accessToken,
+            row.visitId,
+            row.patientId,
+          )
           if (response.status === 200) {
             savedCardData = response.data?.cardData || null
           }
@@ -242,7 +246,7 @@ function ScanDischargeCardPage() {
       headerName: 'Draft',
       flex: 0.4,
       minWidth: 80,
-      valueGetter: (value, row) => (row?.hasDraft ? 'Saved' : '—'),
+      valueGetter: (value, row) => (hasDischargeCardDraft(row) ? 'Saved' : '—'),
     },
     {
       field: 'actions',

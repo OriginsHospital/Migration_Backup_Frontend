@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Button, MenuItem, TextField, Typography } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
@@ -149,8 +149,14 @@ export const resolveDischargeCardData = (
   return draft ? { ...prefill, ...draft } : prefill
 }
 
-export const hasDischargeCardDraft = (row) =>
-  Number(row?.hasSavedCard) === 1 || row?.hasSavedCard === true
+export const hasDischargeCardDraft = (row) => {
+  const raw = row?.hasSavedCard ?? row?.hasDraft
+  if (raw === true || raw === 1 || raw === '1') return true
+  if (raw && typeof raw === 'object' && Array.isArray(raw.data)) {
+    return Number(raw.data[0]) === 1
+  }
+  return Number(raw) === 1
+}
 
 function Field({
   label,
@@ -217,12 +223,22 @@ function DischargeCard({
   const numericPatientId = resolveDischargeCardPatientId(patientInfo)
 
   const [form, setForm] = useState(() => buildPrefill(patientInfo, user))
+  const formRef = useRef(form)
+  const hydratedKeyRef = useRef(null)
+
+  useEffect(() => {
+    formRef.current = form
+  }, [form])
 
   const { data: savedCard, isFetching: isLoadingSavedCard } = useQuery({
-    queryKey: ['dischargeCard', visitId],
-    enabled: Boolean(visitId && user?.accessToken),
+    queryKey: ['dischargeCard', visitId, numericPatientId],
+    enabled: Boolean((visitId || numericPatientId) && user?.accessToken),
     queryFn: async () => {
-      const response = await getDischargeCard(user.accessToken, visitId)
+      const response = await getDischargeCard(
+        user.accessToken,
+        visitId,
+        numericPatientId,
+      )
       if (response.status === 200) {
         return response.data || null
       }
@@ -232,10 +248,20 @@ function DischargeCard({
 
   useEffect(() => {
     if (isLoadingSavedCard) return
+    const key = `${visitId || 'none'}:${numericPatientId || 'none'}:${savedCard?.id || 'empty'}:${savedCard?.updatedAt || ''}`
+    if (hydratedKeyRef.current === key) return
+    hydratedKeyRef.current = key
     const prefill = buildPrefill(patientInfo, user)
     const saved = parseCardData(savedCard?.cardData)
     setForm(saved ? { ...prefill, ...saved } : prefill)
-  }, [patientInfo, user, savedCard, isLoadingSavedCard])
+  }, [
+    visitId,
+    numericPatientId,
+    savedCard,
+    isLoadingSavedCard,
+    patientInfo,
+    user,
+  ])
 
   const persistCard = async () => {
     if (!visitId) {
@@ -267,7 +293,7 @@ function DischargeCard({
       treatmentCycleId:
         toPositiveInt(treatmentCycleId) ||
         toPositiveInt(patientInfo?.treatmentCycleId),
-      cardData: form,
+      cardData: formRef.current,
     })
 
     if (response.status !== 200) {
