@@ -311,8 +311,8 @@ function LabsList() {
     queryFn: async () => {
       const response = await getAllLabTests(
         user.accessToken,
-        `${fromDate.$y}-${fromDate.$M + 1}-${fromDate.$D}`,
-        `${toDate.$y}-${toDate.$M + 1}-${toDate.$D}`,
+        dayjs(fromDate).format('YYYY-MM-DD'),
+        dayjs(toDate).format('YYYY-MM-DD'),
         branchId,
       )
       if (response.status === 200) {
@@ -387,8 +387,17 @@ function LabsList() {
             className="w-48"
             options={branches || []}
             getOptionLabel={(option) => option?.branchCode || option?.name}
-            value={branches?.find((branch) => branch.id === branchId) || null}
-            onChange={(_, value) => setBranchId(value?.id || null)}
+            isOptionEqualToValue={(option, value) =>
+              Number(option?.id) === Number(value?.id)
+            }
+            value={
+              (branches || []).find(
+                (branch) => Number(branch.id) === Number(branchId),
+              ) || null
+            }
+            onChange={(_, value) =>
+              setBranchId(value?.id != null ? Number(value.id) : null)
+            }
             renderInput={(params) => <TextField {...params} label="Branch" />}
             clearIcon={null}
           />

@@ -2010,7 +2010,27 @@ export default function Appointments() {
                   closeOnOutsideClick={true}
                 >
                   <DischargeCard
-                    patientInfo={patientDetails?.patientInfo}
+                    patientInfo={{
+                      ...patientDetails?.patientInfo,
+                      doctorName: selectedPatient?.doctorName,
+                      spouseName:
+                        patientDetails?.patientInfo?.spouseName ||
+                        selectedPatient?.spouseName,
+                      visitId:
+                        selectedPatient?.visit_id ||
+                        selectedPatient?.visitId ||
+                        patientDetails?.patientInfo?.activeVisitId,
+                      appointmentId: selectedPatient?.appointmentId,
+                      appointmentType: selectedPatient?.type,
+                      treatmentCycleId: sheetTreatmentCycleId,
+                    }}
+                    visitId={
+                      selectedPatient?.visit_id ||
+                      selectedPatient?.visitId ||
+                      patientDetails?.patientInfo?.activeVisitId
+                    }
+                    appointmentId={selectedPatient?.appointmentId}
+                    appointmentType={selectedPatient?.type}
                     treatmentCycleId={sheetTreatmentCycleId}
                   />
                 </Modal>

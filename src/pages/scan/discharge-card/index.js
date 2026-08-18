@@ -19,7 +19,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import Close from '@mui/icons-material/Close'
-import { getOpuSheetsByDate } from '@/constants/apis'
+import { getDischargeCardsByDate, getDischargeCard } from '@/constants/apis'
 import { withPermission } from '@/components/withPermission'
 import { ACCESS_TYPES } from '@/constants/constants'
 import { toastconfig } from '@/utils/toastconfig'
@@ -110,7 +110,7 @@ function ScanDischargeCardPage() {
     queryKey: ['scanDischargeCardByDate', date, branchId],
     enabled: !!date,
     queryFn: async () => {
-      const response = await getOpuSheetsByDate(
+      const response = await getDischargeCardsByDate(
         user.accessToken,
         `${date.$y}-${date.$M + 1}-${date.$D}`,
         branchId,
@@ -119,7 +119,8 @@ function ScanDischargeCardPage() {
         return response.data || []
       }
       throw new Error(
-        response?.message || 'Could not load appointments for this date',
+        response?.message ||
+          'Could not load antenatal appointments for this date',
       )
     },
   })
@@ -128,7 +129,8 @@ function ScanDischargeCardPage() {
     const query = patientSearch.trim().toLowerCase()
     const withDraftFlag = rows.map((row) => ({
       ...row,
-      hasDraft: hasDischargeCardDraft(row.patientId, row.treatmentCycleId),
+      id: row.patientId,
+      hasDraft: hasDischargeCardDraft(row),
     }))
     if (!query) return withDraftFlag
     return withDraftFlag.filter((row) =>
@@ -148,8 +150,25 @@ function ScanDischargeCardPage() {
   }
 
   const openDischargeCard = useCallback(
-    (row, mode) => {
-      const cardData = resolveDischargeCardData(row, row.treatmentCycleId, user)
+    async (row, mode) => {
+      let savedCardData = null
+      if (row?.visitId) {
+        try {
+          const response = await getDischargeCard(user.accessToken, row.visitId)
+          if (response.status === 200) {
+            savedCardData = response.data?.cardData || null
+          }
+        } catch {
+          savedCardData = null
+        }
+      }
+
+      const cardData = resolveDischargeCardData(
+        row,
+        row.treatmentCycleId,
+        user,
+        savedCardData,
+      )
 
       if (mode === 'view') {
         setViewTitle(`Discharge Card — ${row.patientName || 'Patient'}`)
@@ -192,6 +211,12 @@ function ScanDischargeCardPage() {
       headerName: 'Reason',
       flex: 1,
       minWidth: 140,
+    },
+    {
+      field: 'visitType',
+      headerName: 'Visit type',
+      flex: 0.8,
+      minWidth: 120,
     },
     {
       field: 'doctorName',
@@ -312,7 +337,7 @@ function ScanDischargeCardPage() {
             columns={columns}
             loading={isLoading}
             getRowId={(row) =>
-              `${row.appointmentId}-${row.treatmentCycleId || row.patientId}`
+              `${row.appointmentType || 'apt'}-${row.appointmentId}-${row.visitId || row.patientId}`
             }
             disableRowSelectionOnClick
             pageSizeOptions={[10, 25, 50]}
@@ -324,7 +349,7 @@ function ScanDischargeCardPage() {
                 <div className="flex items-center justify-center h-full text-gray-400">
                   {patientSearch.trim()
                     ? 'No patients match your search for this branch and date'
-                    : 'No appointments found for this branch and date'}
+                    : 'No antenatal appointments found for this branch and date'}
                 </div>
               ),
             }}
@@ -341,6 +366,9 @@ function ScanDischargeCardPage() {
         {selectedPatient ? (
           <DischargeCard
             patientInfo={selectedPatient}
+            visitId={selectedPatient.visitId}
+            appointmentId={selectedPatient.appointmentId}
+            appointmentType={selectedPatient.appointmentType}
             treatmentCycleId={selectedPatient.treatmentCycleId}
             onAfterClose={() => setDraftTick((tick) => tick + 1)}
           />

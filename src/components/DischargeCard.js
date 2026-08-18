@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Box, Button, MenuItem, TextField, Typography } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import { useDispatch, useSelector } from 'react-redux'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { closeModal } from '@/redux/modalSlice'
 import { openDischargeCardPrintWindow } from '@/utils/dischargeCardPrint'
+import { getDischargeCard, saveDischargeCard } from '@/constants/apis'
 import { toast } from 'react-toastify'
 import { toastconfig } from '@/utils/toastconfig'
 
@@ -46,22 +48,35 @@ const emptyForm = () => ({
   reviewAfter: '',
 })
 
-const storageKeyFor = (patientId, treatmentCycleId) =>
-  `origins-discharge-card:${patientId || 'unknown'}:${treatmentCycleId || 'none'}`
-
-const loadDischargeCardDraft = (patientId, treatmentCycleId) => {
-  try {
-    const saved = localStorage.getItem(
-      storageKeyFor(patientId, treatmentCycleId),
-    )
-    if (!saved) return null
-    return JSON.parse(saved)
-  } catch {
-    return null
+const parseCardData = (cardData) => {
+  if (!cardData) return null
+  if (typeof cardData === 'string') {
+    try {
+      return JSON.parse(cardData)
+    } catch {
+      return null
+    }
   }
+  return cardData
 }
 
-const buildPrefill = (patientInfo, user) => {
+const toPositiveInt = (value) => {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+export const resolveDischargeCardVisitId = (patientInfo, visitId) =>
+  toPositiveInt(visitId) ||
+  toPositiveInt(patientInfo?.visitId) ||
+  toPositiveInt(patientInfo?.visit_id) ||
+  toPositiveInt(patientInfo?.activeVisitId)
+
+export const resolveDischargeCardPatientId = (patientInfo) =>
+  toPositiveInt(patientInfo?.id) ||
+  toPositiveInt(patientInfo?.patientAutoId) ||
+  toPositiveInt(patientInfo?.patientId)
+
+export const buildPrefill = (patientInfo, user) => {
   if (!patientInfo) return emptyForm()
 
   const firstName = patientInfo.firstName || ''
@@ -118,7 +133,7 @@ const buildPrefill = (patientInfo, user) => {
     sex,
     address: addressParts.join(', '),
     regdNo: String(
-      patientInfo.patientId || patientInfo.uhid || patientInfo.id || '',
+      patientInfo.uhid || patientInfo.patientId || patientInfo.id || '',
     ),
   }
 }
@@ -127,17 +142,15 @@ export const resolveDischargeCardData = (
   patientInfo,
   treatmentCycleId,
   user,
+  savedCardData,
 ) => {
   const prefill = buildPrefill(patientInfo, user)
-  const draft = loadDischargeCardDraft(
-    patientInfo?.patientId || patientInfo?.id,
-    treatmentCycleId,
-  )
+  const draft = parseCardData(savedCardData)
   return draft ? { ...prefill, ...draft } : prefill
 }
 
-export const hasDischargeCardDraft = (patientId, treatmentCycleId) =>
-  Boolean(loadDischargeCardDraft(patientId, treatmentCycleId))
+export const hasDischargeCardDraft = (row) =>
+  Number(row?.hasSavedCard) === 1 || row?.hasSavedCard === true
 
 function Field({
   label,
@@ -189,34 +202,88 @@ function Field({
   return <TextField {...commonProps} />
 }
 
-function DischargeCard({ patientInfo, treatmentCycleId, onAfterClose }) {
+function DischargeCard({
+  patientInfo,
+  visitId: visitIdProp,
+  appointmentId,
+  appointmentType,
+  treatmentCycleId,
+  onAfterClose,
+}) {
   const dispatch = useDispatch()
+  const queryClient = useQueryClient()
   const user = useSelector((store) => store.user)
-  const storageKey = useMemo(
-    () =>
-      storageKeyFor(
-        patientInfo?.patientId || patientInfo?.id,
-        treatmentCycleId,
-      ),
-    [patientInfo?.patientId, patientInfo?.id, treatmentCycleId],
-  )
+  const visitId = resolveDischargeCardVisitId(patientInfo, visitIdProp)
+  const numericPatientId = resolveDischargeCardPatientId(patientInfo)
 
   const [form, setForm] = useState(() => buildPrefill(patientInfo, user))
 
-  useEffect(() => {
-    const prefill = buildPrefill(patientInfo, user)
-    try {
-      const saved = localStorage.getItem(storageKey)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setForm({ ...prefill, ...parsed })
-        return
+  const { data: savedCard, isFetching: isLoadingSavedCard } = useQuery({
+    queryKey: ['dischargeCard', visitId],
+    enabled: Boolean(visitId && user?.accessToken),
+    queryFn: async () => {
+      const response = await getDischargeCard(user.accessToken, visitId)
+      if (response.status === 200) {
+        return response.data || null
       }
-    } catch {
-      // ignore corrupt local storage
+      throw new Error(response?.message || 'Could not load discharge card')
+    },
+  })
+
+  useEffect(() => {
+    if (isLoadingSavedCard) return
+    const prefill = buildPrefill(patientInfo, user)
+    const saved = parseCardData(savedCard?.cardData)
+    setForm(saved ? { ...prefill, ...saved } : prefill)
+  }, [patientInfo, user, savedCard, isLoadingSavedCard])
+
+  const persistCard = async () => {
+    if (!visitId) {
+      toast.error(
+        'Visit not found for this appointment. Cannot save discharge card.',
+        toastconfig,
+      )
+      return false
     }
-    setForm(prefill)
-  }, [patientInfo, user, storageKey])
+    if (!numericPatientId) {
+      toast.error(
+        'Patient not found for this appointment. Cannot save discharge card.',
+        toastconfig,
+      )
+      return false
+    }
+
+    const response = await saveDischargeCard(user.accessToken, {
+      visitId,
+      patientId: numericPatientId,
+      appointmentId:
+        toPositiveInt(appointmentId) ||
+        toPositiveInt(patientInfo?.appointmentId),
+      appointmentType:
+        appointmentType ||
+        patientInfo?.appointmentType ||
+        patientInfo?.type ||
+        null,
+      treatmentCycleId:
+        toPositiveInt(treatmentCycleId) ||
+        toPositiveInt(patientInfo?.treatmentCycleId),
+      cardData: form,
+    })
+
+    if (response.status !== 200) {
+      throw new Error(response?.message || 'Unable to save discharge card')
+    }
+
+    await queryClient.invalidateQueries({
+      queryKey: ['dischargeCard', visitId],
+    })
+    await queryClient.invalidateQueries({
+      queryKey: ['scanDischargeCardByDate'],
+      exact: false,
+    })
+    onAfterClose?.()
+    return true
+  }
 
   const handleChange = useCallback((event) => {
     const { name, value } = event.target
@@ -228,36 +295,70 @@ function DischargeCard({ patientInfo, treatmentCycleId, onAfterClose }) {
     onAfterClose?.()
   }
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(form))
-      toast.success('Discharge card draft saved', toastconfig)
-      onAfterClose?.()
+      const saved = await persistCard()
+      if (saved) {
+        toast.success('Discharge card saved', toastconfig)
+      }
     } catch {
-      toast.error('Unable to save draft', toastconfig)
+      toast.error('Unable to save discharge card', toastconfig)
     }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     const confirmed = window.confirm(
-      'Reset discharge card to patient defaults? Saved draft for this patient will be cleared.',
+      'Reset discharge card to patient defaults? Saved data for this visit will be replaced.',
     )
     if (!confirmed) return
-    localStorage.removeItem(storageKey)
-    setForm(buildPrefill(patientInfo, user))
-    toast.info('Discharge card reset', toastconfig)
-    onAfterClose?.()
+    const prefill = buildPrefill(patientInfo, user)
+    setForm(prefill)
+    try {
+      if (!visitId || !numericPatientId) {
+        toast.info('Discharge card reset', toastconfig)
+        return
+      }
+      const response = await saveDischargeCard(user.accessToken, {
+        visitId,
+        patientId: numericPatientId,
+        appointmentId:
+          toPositiveInt(appointmentId) ||
+          toPositiveInt(patientInfo?.appointmentId),
+        appointmentType:
+          appointmentType ||
+          patientInfo?.appointmentType ||
+          patientInfo?.type ||
+          null,
+        treatmentCycleId:
+          toPositiveInt(treatmentCycleId) ||
+          toPositiveInt(patientInfo?.treatmentCycleId),
+        cardData: prefill,
+      })
+      if (response.status !== 200) {
+        throw new Error(response?.message || 'Unable to reset discharge card')
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ['dischargeCard', visitId],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['scanDischargeCardByDate'],
+        exact: false,
+      })
+      toast.info('Discharge card reset', toastconfig)
+      onAfterClose?.()
+    } catch {
+      toast.error('Unable to reset saved discharge card', toastconfig)
+    }
   }
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const printed = openDischargeCardPrintWindow(form)
     if (!printed) {
       toast.error('Unable to print. Allow pop-ups and try again.', toastconfig)
       return
     }
     try {
-      localStorage.setItem(storageKey, JSON.stringify(form))
-      onAfterClose?.()
+      await persistCard()
     } catch {
       // print still succeeded
     }
@@ -283,8 +384,9 @@ function DischargeCard({ patientInfo, treatmentCycleId, onAfterClose }) {
             color="primary"
             startIcon={<SaveOutlinedIcon />}
             onClick={handleSaveDraft}
+            disabled={isLoadingSavedCard}
           >
-            Save Draft
+            Save
           </Button>
           <Button
             variant="contained"

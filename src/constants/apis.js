@@ -1707,8 +1707,16 @@ export const getAllLabTestsByDate = async (token, date, category, branchId) => {
   const myHeaders = new Headers()
   myHeaders.append('Authorization', `Bearer ${token}`)
   myHeaders.append('Content-Type', 'application/json')
+  const params = new URLSearchParams()
+  if (category !== undefined && category !== null && category !== '') {
+    params.set('labCategoryType', String(category))
+  }
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.set('branchId', String(branchId))
+  }
+  const queryString = params.toString()
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_LABTESTS_BY_DATE}/${date}?labCategoryType=${category}&branchId=${branchId}`,
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_LABTESTS_BY_DATE}/${date}${queryString ? `?${queryString}` : ''}`,
     {
       method: 'GET',
       headers: myHeaders,
@@ -2792,6 +2800,57 @@ export const getHysteroLapByDate = async (token, date, branchId) => {
     {
       method: 'GET',
       headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const getDischargeCardsByDate = async (token, date, branchId) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const branchParam =
+    branchId === null || branchId === undefined ? '' : branchId
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_DISCHARGE_CARDS_BY_DATE}${date}?branchId=${branchParam}`,
+    {
+      method: 'GET',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const getDischargeCard = async (token, visitId) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.GET_DISCHARGE_CARD}?visitId=${visitId}`,
+    {
+      method: 'GET',
+      headers: myHeaders,
+      redirect: 'follow',
+      credentials: 'include',
+    },
+  )
+  return response.json()
+}
+
+export const saveDischargeCard = async (token, payload) => {
+  const myHeaders = new Headers()
+  myHeaders.append('Authorization', `Bearer ${token}`)
+  myHeaders.append('Content-Type', 'application/json')
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}${API_ROUTES.SAVE_DISCHARGE_CARD}`,
+    {
+      method: 'POST',
+      headers: myHeaders,
+      body: JSON.stringify(payload),
       redirect: 'follow',
       credentials: 'include',
     },

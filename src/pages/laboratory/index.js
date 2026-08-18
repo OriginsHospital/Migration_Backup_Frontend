@@ -44,6 +44,23 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import { exportReport } from '@/utils/reportExport'
 import LabPatientImageUpload from '@/components/LabPatientImageUpload'
 
+const formatLabDate = (value) =>
+  value ? dayjs(value).format('YYYY-MM-DD') : ''
+
+const parseBranchId = (value) => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    value === 'null' ||
+    value === 'undefined'
+  ) {
+    return null
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function TextJoedit({ contents, savedContent }) {
   // const [content, setContent] = useState(contents)
   const editorRef = useRef(null)
@@ -696,13 +713,28 @@ const LabReportsSection = ({
             className="w-56"
             options={branchOptions}
             getOptionLabel={(option) => option?.branchCode || option?.name}
-            value={
-              branchOptions.find((branch) => branch.id === reportBranchId) ||
-              null
+            isOptionEqualToValue={(option, value) =>
+              parseBranchId(option?.id) === parseBranchId(value?.id)
             }
-            onChange={(_, value) => setReportBranchId(value?.id ?? null)}
-            renderInput={(params) => <TextField {...params} label="Branch" />}
-            clearIcon={null}
+            value={
+              branchOptions.find(
+                (branch) =>
+                  parseBranchId(branch.id) === parseBranchId(reportBranchId),
+              ) || branchOptions[0]
+            }
+            onChange={(_, value) => setReportBranchId(parseBranchId(value?.id))}
+            disableClearable
+            openOnFocus
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Branch"
+                inputProps={{
+                  ...params.inputProps,
+                  readOnly: true,
+                }}
+              />
+            )}
           />
         </div>
         <div className="flex gap-2 items-center">
@@ -765,7 +797,7 @@ const LabReportsSection = ({
 const Index = () => {
   const user = useSelector((store) => store.user)
   const branches = user?.branchDetails
-  const [branchId, setBranchId] = useState(branches[0]?.id || null)
+  const [branchId, setBranchId] = useState(() => parseBranchId(branches[0]?.id))
   const [selectedPatientId, setSelectedPatientId] = useState()
   const [patientDetails, setPatientDetails] = useState()
   const [ButtonFilter, setButtonFilterClicked] = useState()
@@ -779,29 +811,37 @@ const Index = () => {
   const [reportToDate, setReportToDate] = useState(dayjs(new Date()))
   const [reportBranchId, setReportBranchId] = useState(null)
   const router = useRouter()
+  const appointmentDate = formatLabDate(date)
+  const didInitFilters = useRef(false)
+
   useEffect(() => {
-    if (mainTab !== 'report') {
-      const dateStr = `${date.$y}-${date.$M + 1}-${date.$D}`
-      router.push(
-        `/laboratory?date=${dateStr}&category=${category}&branchId=${branchId}`,
-        undefined,
-        {
-          shallow: true,
-        },
-      )
+    if (didInitFilters.current || !router.isReady) {
+      return
     }
-  }, [date, category, branchId, mainTab])
-  useEffect(() => {
-    const { date: urlDate, category: urlCategory } = router.query
+    didInitFilters.current = true
+
+    const urlDate = router.query.date
+    const urlCategory = router.query.category
+    const urlBranchId = parseBranchId(router.query.branchId)
+
     if (urlDate) {
       setDate(dayjs(urlDate))
     }
-    if (urlCategory) {
-      setCategory(urlCategory)
+    if (urlCategory != null && urlCategory !== '') {
+      setCategory(String(urlCategory))
     }
-    console.log('date', date)
-    console.log('urlDate', urlCategory)
-  }, [])
+    if (urlBranchId != null) {
+      setBranchId(urlBranchId)
+    } else if (branches?.[0]?.id != null) {
+      setBranchId(parseBranchId(branches[0].id))
+    }
+  }, [router.isReady])
+
+  useEffect(() => {
+    if (branchId == null && branches?.[0]?.id != null) {
+      setBranchId(parseBranchId(branches[0].id))
+    }
+  }, [branches, branchId])
   const ButtonsInfo = [
     { id: '3', name: 'Collect Sample', clicked: false },
     { id: '1', name: 'Update Results', clicked: false },
@@ -810,17 +850,23 @@ const Index = () => {
   ]
   const dispatch = useDispatch()
   const { data: labTestInfo, isLoading: isAppointmentsLoading } = useQuery({
-    queryKey: ['LabtestsByDate', date, category, branchId],
-    enabled: !!date && mainTab !== 'report',
+    queryKey: ['LabtestsByDate', appointmentDate, category, branchId],
+    enabled: !!appointmentDate && branchId != null && mainTab !== 'report',
     queryFn: async () => {
       const responsejson = await getAllLabTestsByDate(
         user.accessToken,
-        `${date.$y}-${date.$M + 1}-${date.$D}`,
+        appointmentDate,
         category,
         branchId,
       )
       if (responsejson.status == 200) {
-        return responsejson.data
+        return (responsejson.data || []).map((item) => ({
+          ...item,
+          labTests:
+            typeof item.labTests === 'string'
+              ? JSON.parse(item.labTests || '[]')
+              : item.labTests || [],
+        }))
       } else {
         throw new Error('Error occurred while fetching appointments for doctor')
       }
@@ -828,6 +874,12 @@ const Index = () => {
   })
   const handleDateChange = (value) => {
     setDate(value)
+  }
+  const handleBranchChange = (_, value) => {
+    const parsed = parseBranchId(value?.id)
+    if (parsed != null) {
+      setBranchId(parsed)
+    }
   }
   function filterPatientInfo(color, id) {
     if (id == 4) {
@@ -918,10 +970,28 @@ const Index = () => {
               className="w-full text-center"
               options={branches || []}
               getOptionLabel={(option) => option?.branchCode || option?.name}
-              value={branches?.find((branch) => branch.id === branchId) || null}
-              onChange={(_, value) => setBranchId(value?.id || null)}
-              renderInput={(params) => <TextField {...params} fullWidth />}
-              clearIcon={null}
+              isOptionEqualToValue={(option, value) =>
+                parseBranchId(option?.id) === parseBranchId(value?.id)
+              }
+              value={
+                (branches || []).find(
+                  (branch) =>
+                    parseBranchId(branch.id) === parseBranchId(branchId),
+                ) || null
+              }
+              onChange={handleBranchChange}
+              disableClearable
+              openOnFocus
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  inputProps={{
+                    ...params.inputProps,
+                    readOnly: true,
+                  }}
+                />
+              )}
             />
           </div>
           <DatePicker
