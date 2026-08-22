@@ -2566,7 +2566,7 @@ export function PatientFullDetail({
   previewContent,
   setPreviewContent,
 }) {
-  const [horizontalTabInModal, setHorizontalTabInModal] = useState()
+  const [horizontalTabInModal, setHorizontalTabInModal] = useState(null)
   const dispatch = useDispatch()
   const user = useSelector((store) => store.user)
   // console.log(lineBillsAndNotesData)
@@ -2579,16 +2579,20 @@ export function PatientFullDetail({
   function handleHorizontalTabChangeInModal(e, newTab) {
     setHorizontalTabInModal(newTab)
   }
+
+  const availableTabValues = useMemo(
+    () =>
+      lineBillsAndNotesData?.lineBillsData?.map((bill) => bill.billType.name) ??
+      [],
+    [lineBillsAndNotesData],
+  )
+  const effectiveTabValue = availableTabValues.includes(horizontalTabInModal)
+    ? horizontalTabInModal
+    : availableTabValues[0]
+
   useEffect(() => {
-    if (
-      lineBillsAndNotesData?.lineBillsData?.length > 0 &&
-      !horizontalTabInModal
-    ) {
-      setHorizontalTabInModal(
-        lineBillsAndNotesData.lineBillsData[0].billType.name,
-      )
-    }
-  }, [lineBillsAndNotesData])
+    setHorizontalTabInModal(null)
+  }, [patientDetails?.appointmentId, patientDetails?.type])
 
   const handlePaymentMethodOffline = async (e, bill, type = 'CASH') => {
     //confirm yes or no similar to alert()
@@ -3037,7 +3041,7 @@ export function PatientFullDetail({
               />
               <div className="flex flex-col shadow  px-2 my-2 w-full overflow-auto">
                 {lineBillsAndNotesData?.lineBillsData?.length > 0 ? (
-                  <TabContext value={horizontalTabInModal}>
+                  <TabContext value={effectiveTabValue}>
                     <Box
                       className="w-max h-full"
                       sx={{

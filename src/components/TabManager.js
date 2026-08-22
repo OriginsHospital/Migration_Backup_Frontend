@@ -38,6 +38,9 @@ const routeTitleMap = {
   '/dailyreport': 'Daily Report',
   '/ipmodule': 'IP Module',
   '/book-option': 'Book Option',
+  '/admin': 'Admin',
+  '/admin/manageusers': 'Manage Users',
+  '/admin/managefields': 'Master Data',
   '/admin/layouts': 'Master Layouts',
   '/ipmodule/layouts': 'Master Layouts',
 }

@@ -43,7 +43,12 @@ import {
   reviewEraConsents,
 } from '@/constants/apis'
 import dayjs from 'dayjs'
-import { Close, InfoOutlined, Schedule } from '@mui/icons-material'
+import {
+  Close,
+  EditCalendar,
+  InfoOutlined,
+  Schedule,
+} from '@mui/icons-material'
 import Modal from '@/components/Modal'
 import { openModal, closeModal } from '@/redux/modalSlice'
 import FolicularSheet from '@/components/FolicularSheet'
@@ -78,6 +83,59 @@ const HYSTERO_LAP_TYPE_OPTIONS = [
   { value: 'Laproscopy', label: 'Laproscopy' },
   { value: 'Hysterolap', label: 'Hysterolap' },
 ]
+
+function parseBackendDateTime(value) {
+  if (!value) return null
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed : null
+}
+
+function parseSheetColumnDate(value) {
+  if (!value) return null
+  if (dayjs.isDayjs(value)) return value.isValid() ? value : null
+  const parsed = dayjs(value, 'DD/MM')
+  if (!parsed.isValid()) return null
+  if (parsed.diff(dayjs(), 'day') > 45) return parsed.subtract(1, 'year')
+  return parsed
+}
+
+const EDIT_START_CONFIG = {
+  ICSI: {
+    stage: 'UPDATE_TREATMENT_START_DATE',
+    usesTime: false,
+    label: 'ICSI start date',
+  },
+  IUI: {
+    stage: 'UPDATE_TREATMENT_START_DATE',
+    usesTime: false,
+    label: 'IUI start date',
+  },
+  OITI: {
+    stage: 'UPDATE_TREATMENT_START_DATE',
+    usesTime: false,
+    label: 'OITI start date',
+  },
+  FET: {
+    stage: 'UPDATE_FET_START_DATE',
+    usesTime: false,
+    label: 'FET start date',
+  },
+  ERA: {
+    stage: 'UPDATE_ERA_START_TIME',
+    usesTime: true,
+    label: 'ERA start date & time',
+  },
+  TRIGGER: {
+    stage: 'UPDATE_TRIGGER_START_TIME',
+    usesTime: true,
+    label: 'Trigger date & time',
+  },
+  HYSTEROSCOPY: {
+    stage: 'UPDATE_HYSTEROSCOPY_START_TIME',
+    usesTime: true,
+    label: 'Hystero/Lap date & time',
+  },
+}
 
 const DEFAULT_FOLLICULAR_ROWS = [
   { value: '<=10' },
@@ -210,7 +268,9 @@ function Prescription({
           // Only show success if TRIGGER_START is actually 1
           if (updatedStatus?.TRIGGER_START === 1) {
             toast.success(
-              data?.data || 'Trigger Started Successfully',
+              variables?.stage === 'UPDATE_TRIGGER_START_TIME'
+                ? 'Trigger time updated successfully'
+                : data?.data || 'Trigger Started Successfully',
               toastconfig,
             )
           } else {
@@ -235,7 +295,7 @@ function Prescription({
     onError: (error) => {
       console.error('Error starting trigger:', error)
       toast.error(
-        error.message || 'Failed to start trigger. Please try again.',
+        error.message || 'Failed to start or update trigger. Please try again.',
         toastconfig,
       )
     },
@@ -293,6 +353,8 @@ function Prescription({
   const [triggerTime, setTriggerTime] = useState(null)
   const [hysteroscopyTime, setHysteroscopyTime] = useState(null)
   const [eraStartTime, setEraStartTime] = useState(null)
+  const [editStartKind, setEditStartKind] = useState(null)
+  const [editStartValue, setEditStartValue] = useState(null)
   const [oitiStartDate, setOitiStartDate] = useState(
     dayjs().format('YYYY-MM-DD'),
   )
@@ -494,6 +556,41 @@ function Prescription({
     setScanFormData((prev) => remapTreatmentSheetKeys(prev, oldCols, newCols))
   }, [])
 
+  const applyNewSheetColumns = useCallback((kind, oldCols, newCols) => {
+    if (!newCols?.length) return
+    const fromCols = oldCols?.length === newCols.length ? oldCols : newCols
+
+    if (kind === 'FET') {
+      setFETFormData((prev) => remapTreatmentSheetKeys(prev, fromCols, newCols))
+      setScanFetFormData((prev) =>
+        remapTreatmentSheetKeys(prev, fromCols, newCols),
+      )
+      setFETTemplate((prev) => ({ ...(prev || {}), columns: newCols }))
+      return
+    }
+
+    if (kind === 'ERA') {
+      setERAFormData((prev) => remapTreatmentSheetKeys(prev, fromCols, newCols))
+      setEraFolicularFormData((prev) =>
+        remapTreatmentSheetKeys(prev, fromCols, newCols),
+      )
+      setScanEraFormData((prev) =>
+        remapTreatmentSheetKeys(prev, fromCols, newCols),
+      )
+      setERATemplate((prev) => ({ ...(prev || {}), columns: newCols }))
+      return
+    }
+
+    setFolicularFormData((prev) =>
+      remapTreatmentSheetKeys(prev, fromCols, newCols),
+    )
+    setMedicationFormData((prev) =>
+      remapTreatmentSheetKeys(prev, fromCols, newCols),
+    )
+    setScanFormData((prev) => remapTreatmentSheetKeys(prev, fromCols, newCols))
+    setFolicularTemplate((prev) => ({ ...(prev || {}), columns: newCols }))
+  }, [])
+
   useEffect(() => {
     patientSpecificColumnsFixedRef.current = false
   }, [treatmentCycleId, isKrishnaKumarNandini, isKurapatiSravanthi])
@@ -559,6 +656,47 @@ function Prescription({
       )
     }
   }, [treatmentStatus?.eraStartDate])
+
+  const resolveCurrentStartValue = useCallback(
+    (kind) => {
+      if (kind === 'TRIGGER') {
+        return parseBackendDateTime(treatmentStatus?.triggerStartDate)
+      }
+      if (kind === 'HYSTEROSCOPY') {
+        return parseBackendDateTime(treatmentStatus?.hysteroscopyTime)
+      }
+      if (kind === 'ERA') {
+        return (
+          parseBackendDateTime(eraStartTime) ||
+          parseBackendDateTime(treatmentStatus?.eraStartDate) ||
+          parseSheetColumnDate(eraTemplate?.columns?.[0])
+        )
+      }
+      if (kind === 'FET') {
+        return (
+          parseBackendDateTime(treatmentStatus?.fetStartDate) ||
+          parseSheetColumnDate(fetTemplate?.columns?.[0])
+        )
+      }
+      return (
+        parseBackendDateTime(treatmentStatus?.startDate) ||
+        parseSheetColumnDate(follicularTemplate?.columns?.[0])
+      )
+    },
+    [
+      eraStartTime,
+      eraTemplate?.columns,
+      fetTemplate?.columns,
+      follicularTemplate?.columns,
+      treatmentStatus,
+    ],
+  )
+
+  const openEditStartModal = (kind) => {
+    setEditStartKind(kind)
+    setEditStartValue(resolveCurrentStartValue(kind) || dayjs())
+    dispatch(openModal('editTreatmentStartDate'))
+  }
 
   // const [folicularSheet, setFolicularSheet] = useState('')
   // const { data: defaultTreatmentTemplate } = useQuery({
@@ -1591,10 +1729,7 @@ function Prescription({
     },
     onSuccess: (data) => {
       if (data?.date) {
-        setERATemplate((prev) => ({
-          ...prev,
-          columns: data.date,
-        }))
+        applyNewSheetColumns('ERA', eraTemplate?.columns, data.date)
       }
       queryClient.invalidateQueries(treatmentStatusQueryKey)
       queryClient.invalidateQueries('treatmentERASheet')
@@ -1602,6 +1737,73 @@ function Prescription({
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to update ERA start time')
+    },
+  })
+  const updateStartedTreatmentDateMutation = useMutation({
+    mutationFn: async ({ kind, value }) => {
+      const config = EDIT_START_CONFIG[kind]
+      if (!config) {
+        throw new Error('Unknown treatment start date type')
+      }
+      if (!value || !dayjs(value).isValid()) {
+        throw new Error(`Please select a valid ${config.label}`)
+      }
+
+      const payload = {
+        visitId: patientInfo?.activeVisitId,
+        treatmentType: patientInfo?.treatmentDetails?.treatmentTypeId,
+        stage: config.stage,
+      }
+
+      if (kind === 'TRIGGER') {
+        payload.triggerTime = dayjs(value).format('YYYY-MM-DDTHH:mm:00[Z]')
+      } else if (kind === 'HYSTEROSCOPY') {
+        payload.hysteroscopyTime = dayjs(value).toISOString()
+      } else if (kind === 'ERA') {
+        payload.eraStartTime = dayjs(value).format('YYYY-MM-DDTHH:mm:00[Z]')
+      } else {
+        payload.treatmentStartDate = dayjs(value).format('YYYY-MM-DD')
+      }
+
+      const res = await updateTreatmentStatus(user.accessToken, payload)
+      if (res.status !== 200) {
+        throw new Error(res.message || `Failed to update ${config.label}`)
+      }
+      return { data: res.data, kind }
+    },
+    onSuccess: ({ data, kind }) => {
+      const newCols = data?.date
+      if (newCols) {
+        if (kind === 'FET') {
+          applyNewSheetColumns('FET', fetTemplate?.columns, newCols)
+        } else if (kind === 'ERA') {
+          applyNewSheetColumns('ERA', eraTemplate?.columns, newCols)
+        } else if (['ICSI', 'IUI', 'OITI'].includes(kind)) {
+          applyNewSheetColumns(kind, follicularTemplate?.columns, newCols)
+        }
+      }
+
+      if (kind === 'ERA' && data?.eraStartDate) {
+        setEraStartTime(
+          dayjs(data.eraStartDate).format('YYYY-MM-DDTHH:mm:00[Z]'),
+        )
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: ['treatmentStatus'],
+        exact: false,
+      })
+      queryClient.invalidateQueries('treatmentSheet')
+      queryClient.invalidateQueries('treatmentFETSheet')
+      queryClient.invalidateQueries('treatmentERASheet')
+      dispatch(closeModal('editTreatmentStartDate'))
+      toast.success(
+        `${EDIT_START_CONFIG[kind]?.label || 'Start date'} updated successfully`,
+        toastconfig,
+      )
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to update start date', toastconfig)
     },
   })
   function EndTreatmentModal({ type, visitId, onClose }) {
@@ -1969,6 +2171,10 @@ function Prescription({
   }
 
   const startDispatchTriggerModal = () => {
+    const existingTrigger = parseBackendDateTime(
+      treatmentStatus?.triggerStartDate,
+    )
+    setTriggerTime(treatmentStatus?.TRIGGER_START == 1 ? existingTrigger : null)
     dispatch(openModal('triggerDate'))
   }
 
@@ -1996,8 +2202,16 @@ function Prescription({
       return
     }
 
+    const isEditingTrigger = treatmentStatus?.TRIGGER_START == 1
+
     // Confirm action
-    if (!confirm('Are you sure you want to start trigger?')) {
+    if (
+      !confirm(
+        isEditingTrigger
+          ? 'Are you sure you want to update the trigger time? Pickup OT will be recalculated to 35 hours later.'
+          : 'Are you sure you want to start trigger?',
+      )
+    ) {
       return
     }
 
@@ -2005,7 +2219,7 @@ function Prescription({
     updateTreatmentStatusMutation(
       {
         visitId: patientInfo.activeVisitId,
-        stage: 'TRIGGER_START',
+        stage: isEditingTrigger ? 'UPDATE_TRIGGER_START_TIME' : 'TRIGGER_START',
         triggerTime: triggerTime.format('YYYY-MM-DDTHH:mm:00[Z]'),
         treatmentType: patientInfo.treatmentDetails.treatmentTypeId,
       },
@@ -2073,6 +2287,24 @@ function Prescription({
         }),
       })
     }
+  }
+
+  const renderEditStartButton = (kind, canEdit) => {
+    if (!canEdit) return null
+    return (
+      <Tooltip title={`Edit ${EDIT_START_CONFIG[kind].label}`}>
+        <span>
+          <Button
+            variant="outlined"
+            className="capitalize min-w-0 px-2"
+            onClick={() => openEditStartModal(kind)}
+            disabled={updateStartedTreatmentDateMutation.isPending}
+          >
+            <EditCalendar fontSize="small" />
+          </Button>
+        </span>
+      </Tooltip>
+    )
   }
 
   return (
@@ -2145,6 +2377,11 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'ICSI',
+                treatmentStatus?.START_ICSI == 1 &&
+                  treatmentStatus?.END_ICSI == 0,
+              )}
             </ButtonGroup>
           )}
           {treatmentStatus?.START_IUI >= 0 && (
@@ -2177,6 +2414,11 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'IUI',
+                treatmentStatus?.START_IUI == 1 &&
+                  treatmentStatus?.END_IUI == 0,
+              )}
             </ButtonGroup>
           )}
           {treatmentStatus?.START_OITI >= 0 && (
@@ -2209,6 +2451,11 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'OITI',
+                treatmentStatus?.START_OITI == 1 &&
+                  treatmentStatus?.END_OITI == 0,
+              )}
             </ButtonGroup>
           )}
           {/* END OITI */}
@@ -2252,14 +2499,14 @@ function Prescription({
               variant="contained"
               className=" capitalize text-white"
               onClick={startDispatchTriggerModal}
-              disabled={
-                treatmentStatus?.TRIGGER_START == 1 || isUpdatingTrigger
-              }
+              disabled={isUpdatingTrigger}
             >
               {isUpdatingTrigger
-                ? 'Starting Trigger...'
+                ? treatmentStatus?.TRIGGER_START == 1
+                  ? 'Updating Trigger...'
+                  : 'Starting Trigger...'
                 : treatmentStatus?.TRIGGER_START == 1
-                  ? 'Trigger Started'
+                  ? 'Edit Trigger'
                   : 'Start Trigger'}
             </Button>
           )}
@@ -2270,7 +2517,9 @@ function Prescription({
           >
             <div className="flex justify-between">
               <Typography variant="h6" className="text-gray-800 mb-2">
-                Trigger
+                {treatmentStatus?.TRIGGER_START == 1
+                  ? 'Edit Trigger Time'
+                  : 'Trigger'}
               </Typography>
               <IconButton onClick={() => dispatch(closeModal())}>
                 <Close />
@@ -2298,7 +2547,9 @@ function Prescription({
               />
               <h5 className="text-sm mt-2 text-gray-800 flex items-center gap-2">
                 <InfoOutlined />
-                Please Provide Trigger Time to proceed further
+                {treatmentStatus?.TRIGGER_START == 1
+                  ? 'Updating trigger time will also move pickup OT to 35 hours later'
+                  : 'Please Provide Trigger Time to proceed further'}
               </h5>
               <Button
                 variant="contained"
@@ -2306,7 +2557,13 @@ function Prescription({
                 disabled={!triggerTime || isUpdatingTrigger}
                 onClick={handleActionOnStartTrigger}
               >
-                {isUpdatingTrigger ? 'Starting...' : 'Start Trigger'}
+                {isUpdatingTrigger
+                  ? treatmentStatus?.TRIGGER_START == 1
+                    ? 'Updating...'
+                    : 'Starting...'
+                  : treatmentStatus?.TRIGGER_START == 1
+                    ? 'Update Trigger'
+                    : 'Start Trigger'}
               </Button>
             </div>
           </Modal>
@@ -2341,6 +2598,11 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'FET',
+                treatmentStatus?.FET_START == 1 &&
+                  treatmentStatus?.END_FET == 0,
+              )}
             </ButtonGroup>
           )}
           {/* {treatmentStatus?.FET_START == 1 && treatmentStatus?.END_FET >= 0 && (
@@ -2394,6 +2656,11 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'ERA',
+                treatmentStatus?.START_ERA == 1 &&
+                  treatmentStatus?.END_ERA == 0,
+              )}
             </ButtonGroup>
           )}
           {/* {treatmentStatus?.START_ERA == 1 && treatmentStatus?.END_ERA >= 0 && (
@@ -2449,6 +2716,10 @@ function Prescription({
                     End
                   </Button>
                 )}
+              {renderEditStartButton(
+                'HYSTEROSCOPY',
+                isHysteroLapStarted && treatmentStatus?.END_HYSTEROSCOPY != 1,
+              )}
             </ButtonGroup>
           )}
           {/* <Button
@@ -2572,6 +2843,12 @@ function Prescription({
               setFolicularTemplate={setFolicularTemplate}
               canUpdate={treatmentStatus?.END_ICSI == 0}
               onDay1DateChange={handleDay1DateChange}
+              onPersistStartDate={(isoDate) =>
+                updateStartedTreatmentDateMutation.mutate({
+                  kind: 'ICSI',
+                  value: dayjs(isoDate),
+                })
+              }
             />
 
             {/* Medication Sheet  */}
@@ -2628,6 +2905,12 @@ function Prescription({
               setFolicularTemplate={setFolicularTemplate}
               canUpdate={treatmentStatus?.END_IUI == 0}
               onDay1DateChange={handleDay1DateChange}
+              onPersistStartDate={(isoDate) =>
+                updateStartedTreatmentDateMutation.mutate({
+                  kind: 'IUI',
+                  value: dayjs(isoDate),
+                })
+              }
             />
 
             {/* Medication Sheet  */}
@@ -2736,6 +3019,12 @@ function Prescription({
               setFolicularTemplate={setFolicularTemplate}
               canUpdate={treatmentStatus?.END_OITI == 0}
               onDay1DateChange={handleDay1DateChange}
+              onPersistStartDate={(isoDate) =>
+                updateStartedTreatmentDateMutation.mutate({
+                  kind: 'OITI',
+                  value: dayjs(isoDate),
+                })
+              }
             />
 
             {/* Medication Sheet  */}
@@ -2791,6 +3080,12 @@ function Prescription({
               canUpdate={treatmentStatus?.END_FET == 0}
               medicationOptions={medicationOptionsFollicular}
               allBillTypeValues={allBillTypeValues}
+              onPersistStartDate={(isoDate) =>
+                updateStartedTreatmentDateMutation.mutate({
+                  kind: 'FET',
+                  value: dayjs(isoDate),
+                })
+              }
             />
             <ScanSheet
               scanFormData={scanFetFormData}
@@ -2910,6 +3205,20 @@ function Prescription({
                 updateEraStartTimeMutation.mutate(eraStartTime)
               }}
               isUpdatingEraStartTime={updateEraStartTimeMutation.isLoading}
+              onPersistStartDate={(isoDate) => {
+                const existing =
+                  parseBackendDateTime(eraStartTime) ||
+                  parseBackendDateTime(treatmentStatus?.eraStartDate) ||
+                  dayjs()
+                const next = dayjs(isoDate)
+                  .hour(existing.hour())
+                  .minute(existing.minute())
+                  .second(0)
+                updateStartedTreatmentDateMutation.mutate({
+                  kind: 'ERA',
+                  value: next,
+                })
+              }}
             />
             <ERASheet
               eraFormData={eraFormData}
@@ -3400,6 +3709,84 @@ function Prescription({
           consultationId={patientInfo?.consultationId}
           onClose={() => dispatch(closeModal('endTreatment-Visit'))}
         />
+      </Modal>
+      <Modal
+        uniqueKey="editTreatmentStartDate"
+        maxWidth="xs"
+        closeOnOutsideClick={true}
+        onOutsideClick={() => {
+          setEditStartKind(null)
+          setEditStartValue(null)
+        }}
+      >
+        <div className="flex justify-between">
+          <Typography variant="h6" className="text-gray-800 mb-2">
+            Edit {EDIT_START_CONFIG[editStartKind]?.label || 'start date'}
+          </Typography>
+          <IconButton onClick={() => dispatch(closeModal())}>
+            <Close />
+          </IconButton>
+        </div>
+        <div className="flex flex-col gap-3 items-center py-2">
+          {EDIT_START_CONFIG[editStartKind]?.usesTime ? (
+            <DateTimePicker
+              label={EDIT_START_CONFIG[editStartKind]?.label}
+              className="bg-white rounded-lg w-full"
+              format="DD/MM/YYYY hh:mm A"
+              value={editStartValue}
+              onChange={(newValue) =>
+                setEditStartValue(
+                  newValue && dayjs(newValue).isValid()
+                    ? dayjs(newValue)
+                    : null,
+                )
+              }
+              viewRenderers={{
+                hours: renderTimeViewClock,
+                minutes: renderTimeViewClock,
+              }}
+            />
+          ) : (
+            <DatePicker
+              label={EDIT_START_CONFIG[editStartKind]?.label}
+              className="bg-white rounded-lg w-full"
+              format="DD/MM/YYYY"
+              value={editStartValue}
+              maxDate={dayjs()}
+              onChange={(newValue) =>
+                setEditStartValue(
+                  newValue && dayjs(newValue).isValid()
+                    ? dayjs(newValue)
+                    : null,
+                )
+              }
+            />
+          )}
+          <p className="text-sm text-gray-600 text-center">
+            {editStartKind === 'TRIGGER'
+              ? 'Pickup OT will be moved to 35 hours after the new trigger time.'
+              : 'Treatment sheet dates will shift to match this start date. Entered values stay on the same day numbers.'}
+          </p>
+          <Button
+            variant="contained"
+            className="text-white capitalize"
+            disabled={
+              !editStartValue ||
+              !dayjs(editStartValue).isValid() ||
+              updateStartedTreatmentDateMutation.isPending
+            }
+            onClick={() =>
+              updateStartedTreatmentDateMutation.mutate({
+                kind: editStartKind,
+                value: editStartValue,
+              })
+            }
+          >
+            {updateStartedTreatmentDateMutation.isPending
+              ? 'Updating...'
+              : 'Update start date'}
+          </Button>
+        </div>
       </Modal>
     </div>
   )

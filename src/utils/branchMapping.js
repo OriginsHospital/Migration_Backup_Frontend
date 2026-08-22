@@ -130,9 +130,9 @@ export const getSelectableBranches = (userDetails, dropdownBranches = []) => {
     return normalizedDropdown.length ? normalizedDropdown : userBranches
   }
 
-  const allowedIds = new Set(userBranches.map((branch) => branch.id))
+  const allowedIds = new Set(userBranches.map((branch) => String(branch.id)))
   const fromDropdown = normalizedDropdown.filter((branch) =>
-    allowedIds.has(branch.id),
+    allowedIds.has(String(branch.id)),
   )
 
   if (fromDropdown.length) {

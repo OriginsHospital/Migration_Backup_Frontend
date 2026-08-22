@@ -49,7 +49,9 @@ const parseSheetDate = (value) => {
   if (!value) return null
   if (dayjs.isDayjs(value)) return value.isValid() ? value : null
   const parsed = dayjs(value, 'DD/MM')
-  return parsed.isValid() ? parsed : null
+  if (!parsed.isValid()) return null
+  if (parsed.diff(dayjs(), 'day') > 45) return parsed.subtract(1, 'year')
+  return parsed
 }
 
 const FollicularScanForm = ({
@@ -65,6 +67,7 @@ const FollicularScanForm = ({
   onUpdateEraStartTime,
   isUpdatingEraStartTime = false,
   onDay1DateChange,
+  onPersistStartDate,
 }) => {
   const dispatch = useDispatch()
   const handleInputChange = useCallback(
@@ -118,6 +121,11 @@ const FollicularScanForm = ({
       )
       if (oldCols.join('|') === newCols.join('|')) return
 
+      if (onPersistStartDate) {
+        onPersistStartDate(start.format('YYYY-MM-DD'))
+        return
+      }
+
       setFolicularFormData((prev) =>
         remapSheetKeysByColumns(prev, oldCols, newCols),
       )
@@ -130,6 +138,7 @@ const FollicularScanForm = ({
     [
       follicularTemplate?.columns,
       onDay1DateChange,
+      onPersistStartDate,
       setFolicularFormData,
       setFolicularTemplate,
     ],

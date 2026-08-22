@@ -115,15 +115,38 @@ function IPModule() {
   })
 
   const billing = billingResponse?.data
+  const medicinesIncludedInPackage = Boolean(
+    billing?.medicinesIncludedInPackage ??
+      Number(billing?.billed?.package || 0) > 0,
+  )
+  const payableBilled = billing
+    ? medicinesIncludedInPackage
+      ? Number(billing.billed?.room || 0) +
+        Number(billing.billed?.package || 0) +
+        Number(billing.billed?.other || 0)
+      : Number(billing.billed?.total || 0)
+    : 0
+  const payablePending = billing
+    ? medicinesIncludedInPackage
+      ? Number(billing.pending?.room || 0) +
+        Number(billing.pending?.package || 0)
+      : Number(billing.pending?.total || 0)
+    : 0
 
   useEffect(() => {
     if (!billing?.pending) return
+    const includeMedicinesInPackage = Boolean(
+      billing.medicinesIncludedInPackage ??
+        Number(billing.billed?.package || 0) > 0,
+    )
     setCollectForm((prev) => ({
       ...prev,
       roomAmount: billing.pending.room ? String(billing.pending.room) : '',
-      medicineAmount: billing.pending.medicine
-        ? String(billing.pending.medicine)
-        : '',
+      medicineAmount: includeMedicinesInPackage
+        ? ''
+        : billing.pending.medicine
+          ? String(billing.pending.medicine)
+          : '',
       packageAmount: billing.pending.package
         ? String(billing.pending.package)
         : '',
@@ -187,11 +210,13 @@ function IPModule() {
   const collectTotal = useMemo(() => {
     return (
       Number(collectForm.roomAmount || 0) +
-      Number(collectForm.medicineAmount || 0) +
+      (medicinesIncludedInPackage
+        ? 0
+        : Number(collectForm.medicineAmount || 0)) +
       Number(collectForm.packageAmount || 0) +
       Number(collectForm.otherAmount || 0)
     )
-  }, [collectForm])
+  }, [collectForm, medicinesIncludedInPackage])
 
   const handleCollect = () => {
     if (!billingRow?.id) return
@@ -203,7 +228,9 @@ function IPModule() {
       ipId: Number(billingRow.id),
       paymentMode,
       roomAmount: Number(collectForm.roomAmount || 0),
-      medicineAmount: Number(collectForm.medicineAmount || 0),
+      medicineAmount: medicinesIncludedInPackage
+        ? 0
+        : Number(collectForm.medicineAmount || 0),
       packageAmount: Number(collectForm.packageAmount || 0),
       otherAmount: Number(collectForm.otherAmount || 0),
       otherDescription: collectForm.otherDescription || null,
@@ -533,6 +560,16 @@ function IPModule() {
                             }`
                           : ' · no indent items for this stay'}
                       </Typography>
+                      {medicinesIncludedInPackage && (
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          color="success.main"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          Included in package — not added to amount payable
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       ₹{money(billing.billed.medicine)}
@@ -541,11 +578,24 @@ function IPModule() {
                       ₹{money(billing.paid.medicine)}
                     </TableCell>
                     <TableCell align="right">
-                      ₹{money(billing.pending.medicine)}
+                      {medicinesIncludedInPackage
+                        ? '—'
+                        : `₹${money(billing.pending.medicine)}`}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell>Package amount</TableCell>
+                    <TableCell>
+                      Package amount
+                      {medicinesIncludedInPackage && (
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          color="text.secondary"
+                        >
+                          Includes IP Indent medicines
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell align="right">
                       ₹{money(billing.billed.package)}
                     </TableCell>
@@ -571,13 +621,13 @@ function IPModule() {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      ₹{money(billing.billed.total)}
+                      ₹{money(payableBilled)}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
                       ₹{money(billing.paid.total)}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      ₹{money(billing.pending.total)}
+                      ₹{money(payablePending)}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -587,6 +637,12 @@ function IPModule() {
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                   IP Indent pharmacy items
                 </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Rate is pharmacy selling price per unit (GRN MRP ÷ pack size)
+                  {medicinesIncludedInPackage
+                    ? ' · consumption only, already included in package'
+                    : ''}
+                </Typography>
                 {billing.medicines?.length > 0 ? (
                   <Table size="small">
                     <TableHead>
@@ -594,7 +650,7 @@ function IPModule() {
                         <TableCell>Item</TableCell>
                         <TableCell>Prescribed on</TableCell>
                         <TableCell align="right">Qty</TableCell>
-                        <TableCell align="right">Rate</TableCell>
+                        <TableCell align="right">Rate / unit</TableCell>
                         <TableCell align="right">Amount</TableCell>
                       </TableRow>
                     </TableHead>
@@ -621,6 +677,9 @@ function IPModule() {
                       <TableRow>
                         <TableCell colSpan={4} sx={{ fontWeight: 700 }}>
                           Medicines total
+                          {medicinesIncludedInPackage
+                            ? ' (included in package)'
+                            : ''}
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>
                           ₹{money(billing.billed.medicine)}
@@ -655,26 +714,33 @@ function IPModule() {
                     }
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Medicines bill"
-                    helperText="From this patient's IP Indent"
-                    value={collectForm.medicineAmount}
-                    onChange={(e) =>
-                      setCollectForm((prev) => ({
-                        ...prev,
-                        medicineAmount: e.target.value,
-                      }))
-                    }
-                  />
-                </Grid>
+                {!medicinesIncludedInPackage && (
+                  <Grid item xs={12} sm={6} md={3}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Medicines bill"
+                      helperText="From this patient's IP Indent"
+                      value={collectForm.medicineAmount}
+                      onChange={(e) =>
+                        setCollectForm((prev) => ({
+                          ...prev,
+                          medicineAmount: e.target.value,
+                        }))
+                      }
+                    />
+                  </Grid>
+                )}
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     fullWidth
                     type="number"
                     label="Package amount"
+                    helperText={
+                      medicinesIncludedInPackage
+                        ? 'Includes medicines from IP Indent'
+                        : undefined
+                    }
                     value={collectForm.packageAmount}
                     onChange={(e) =>
                       setCollectForm((prev) => ({
@@ -742,7 +808,11 @@ function IPModule() {
               </Grid>
 
               <Alert severity={collectTotal > 0 ? 'success' : 'info'}>
-                Collecting now: ₹{money(collectTotal)}
+                {medicinesIncludedInPackage
+                  ? `Amount payable (package includes medicines): ₹${money(
+                      collectTotal,
+                    )}`
+                  : `Collecting now: ₹${money(collectTotal)}`}
               </Alert>
 
               {billing.payments?.length > 0 && (

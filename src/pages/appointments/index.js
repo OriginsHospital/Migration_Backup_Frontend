@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { Board } from '@/components/Board'
 import FlyoutLink from '@/components/FlyoutLink'
@@ -67,10 +67,16 @@ const APPOINTMENT_EXPORT_COLUMNS = [
   { field: 'noShowReason', headerName: 'No Show Reason' },
 ]
 
+const parseBranchId = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 const Appointments = () => {
   const queryClient = useQueryClient()
   const dispatch = useDispatch()
-  const [date, setDate] = useState()
+  const [date, setDate] = useState(() => dayjs())
   const userDetails = useSelector((store) => store.user)
   const router = useRouter()
   const dropdowns = useSelector((store) => store.dropdowns)
@@ -91,49 +97,121 @@ const Appointments = () => {
     [branches],
   )
 
-  useEffect(() => {
-    const date = router.query.date
-    const branchId = router.query.branchId
-    if (date) {
-      // If date is provided in the query, set it
-      setDate(dayjs(date))
+  const selectedBranch =
+    branches?.find((branch) => String(branch.id) === String(branchId)) || null
+
+  const dateStr = date ? dayjs(date).format('YYYY-MM-DD') : null
+  const routerRef = useRef(router)
+  routerRef.current = router
+
+  const syncFilterQuery = useCallback((nextDate, nextBranchId) => {
+    const currentRouter = routerRef.current
+    if (!currentRouter.isReady) return
+
+    const nextDateStr = dayjs(nextDate).format('YYYY-MM-DD')
+    const nextBranchStr =
+      nextBranchId === null || nextBranchId === undefined || nextBranchId === ''
+        ? ''
+        : String(nextBranchId)
+    const currentDateStr = currentRouter.query.date || ''
+    const currentBranchStr =
+      currentRouter.query.branchId === undefined ||
+      currentRouter.query.branchId === null
+        ? ''
+        : String(currentRouter.query.branchId)
+
+    if (currentDateStr === nextDateStr && currentBranchStr === nextBranchStr) {
+      return
+    }
+
+    const query = {
+      ...currentRouter.query,
+      date: nextDateStr,
+    }
+    if (nextBranchStr) {
+      query.branchId = nextBranchStr
     } else {
-      setDate(dayjs(new Date()))
-      router.push({ query: { date: dayjs(new Date()).format('YYYY-MM-DD') } })
+      delete query.branchId
     }
-    if (branchId) {
-      // If branchId is provided in the query, set it
-      setBranchId(parseInt(branchId))
-    } else if (branches?.length > 0) {
-      setBranchId(branches[0]?.id || null)
+
+    currentRouter.replace(
+      {
+        pathname: '/appointments',
+        query,
+      },
+      undefined,
+      { shallow: true },
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!router.isReady) return
+
+    const routeDate = Array.isArray(router.query.date)
+      ? router.query.date[0]
+      : router.query.date
+    const routeBranchId = Array.isArray(router.query.branchId)
+      ? router.query.branchId[0]
+      : router.query.branchId
+
+    const nextDate = routeDate ? dayjs(routeDate) : dayjs()
+    const parsedRouteBranchId = parseBranchId(routeBranchId)
+    const routeBranchAllowed =
+      parsedRouteBranchId != null &&
+      (!branches?.length ||
+        branches.some(
+          (branch) => String(branch.id) === String(parsedRouteBranchId),
+        ))
+    const nextBranchId = routeBranchAllowed
+      ? parsedRouteBranchId
+      : parseBranchId(branches?.[0]?.id)
+
+    setDate((prev) => (prev && prev.isSame(nextDate, 'day') ? prev : nextDate))
+    setBranchId((prev) =>
+      String(prev ?? '') === String(nextBranchId ?? '') ? prev : nextBranchId,
+    )
+
+    if (!routeDate || !routeBranchAllowed) {
+      syncFilterQuery(nextDate, nextBranchId)
     }
-  }, [router.query.date, router.query.branchId, branches])
+  }, [
+    router.isReady,
+    router.query.date,
+    router.query.branchId,
+    branches,
+    syncFilterQuery,
+  ])
+
   const { data: allAppointmentsData } = useQuery({
-    queryKey: ['allAppointments', userDetails?.accessToken, date, branchId],
-    queryFn: async () => {
-      dispatch(showLoader())
-      const res = await getAllAppointmentsByDate(
-        userDetails?.accessToken,
-        dayjs(date).format('YYYY-MM-DD'),
-        branchId,
-      )
-      dispatch(hideLoader())
-      return res
-    },
+    queryKey: ['allAppointments', dateStr, branchId],
+    enabled: Boolean(userDetails?.accessToken && dateStr && branchId != null),
+    placeholderData: (previousData) => previousData,
+    queryFn: () =>
+      getAllAppointmentsByDate(userDetails?.accessToken, dateStr, branchId),
   })
 
+  const boardAppointmentsData = useMemo(() => {
+    if (!allAppointmentsData || branchId == null) return allAppointmentsData
+    const rows = allAppointmentsData.data
+    if (!Array.isArray(rows)) return allAppointmentsData
+    return {
+      ...allAppointmentsData,
+      data: rows.filter((row) => String(row.branchId) === String(branchId)),
+    }
+  }, [allAppointmentsData, branchId])
+
   function handleDateChange(value) {
+    if (!value || (typeof value.isValid === 'function' && !value.isValid())) {
+      return
+    }
     setDate(value)
-    router.push({ query: { date: dayjs(value).format('YYYY-MM-DD') } })
+    syncFilterQuery(value, branchId)
   }
+
   const handleBranchChange = (_, value) => {
-    setBranchId(value?.id || null)
-    router.push({
-      query: {
-        date: dayjs(date).format('YYYY-MM-DD'),
-        branchId: value?.id || null,
-      },
-    })
+    const nextBranchId = parseBranchId(value?.id)
+    setBranchId(nextBranchId)
+    syncFilterQuery(date, nextBranchId)
   }
 
   const openExportDialog = () => {
@@ -147,7 +225,7 @@ const Appointments = () => {
   const getBranchLabel = useCallback(
     (id) => {
       if (id === ALL_BRANCHES_VALUE) return 'All'
-      const branch = branches?.find((b) => b.id === id)
+      const branch = branches?.find((b) => String(b.id) === String(id))
       return branch?.branchCode || branch?.name || ''
     },
     [branches],
@@ -261,8 +339,13 @@ const Appointments = () => {
           <Autocomplete
             className="w-[120px]"
             options={branches || []}
-            getOptionLabel={(option) => option?.branchCode || option?.name}
-            value={branches?.find((branch) => branch.id === branchId) || null}
+            getOptionLabel={(option) =>
+              option?.branchCode || option?.name || ''
+            }
+            isOptionEqualToValue={(option, value) =>
+              String(option?.id) === String(value?.id)
+            }
+            value={selectedBranch}
             onChange={handleBranchChange}
             renderInput={(params) => <TextField {...params} fullWidth />}
             clearIcon={null}
@@ -270,7 +353,7 @@ const Appointments = () => {
         </div>
         <DatePicker
           className="bg-white"
-          value={date}
+          value={date ?? null}
           format="DD/MM/YYYY"
           onChange={handleDateChange}
         />
@@ -285,7 +368,7 @@ const Appointments = () => {
       </div>
       <div className="bg-white rounded-lg m-2 border shadow h-[75vh]">
         <Board
-          allAppointmentsData={allAppointmentsData}
+          allAppointmentsData={boardAppointmentsData}
           updateStage={updateStage}
         />
       </div>
@@ -327,11 +410,15 @@ const Appointments = () => {
                 ? 'All'
                 : option?.branchCode || option?.name || ''
             }
-            isOptionEqualToValue={(option, value) => option?.id === value?.id}
+            isOptionEqualToValue={(option, value) =>
+              String(option?.id) === String(value?.id)
+            }
             value={
               exportBranchId === ALL_BRANCHES_VALUE
                 ? ALL_BRANCHES_OPTION
-                : branches?.find((b) => b.id === exportBranchId) || null
+                : branches?.find(
+                    (b) => String(b.id) === String(exportBranchId),
+                  ) || null
             }
             onChange={(_, value) => {
               setExportBranchId(value?.id ?? ALL_BRANCHES_VALUE)

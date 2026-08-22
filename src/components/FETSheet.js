@@ -1,11 +1,51 @@
 import React, { useCallback } from 'react'
 import { Button, IconButton, Typography } from '@mui/material'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import { DatePicker } from '@mui/x-date-pickers'
 import { useDispatch } from 'react-redux'
 import { closeModal } from '@/redux/modalSlice'
 import MedicationSheet from './MedicationSheet'
 import ScanSheet from './ScanSheet'
 import { Close } from '@mui/icons-material'
+
+dayjs.extend(customParseFormat)
+
+const remapSheetKeysByColumns = (data, oldCols, newCols) => {
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !oldCols?.length ||
+    !newCols?.length
+  ) {
+    return data
+  }
+
+  const remapped = {}
+  Object.entries(data).forEach(([key, value]) => {
+    let newKey = key
+    for (let i = 0; i < oldCols.length; i++) {
+      const oldCol = oldCols[i]
+      const newCol = newCols[i]
+      if (!oldCol || !newCol || oldCol === newCol) continue
+      if (key === `${oldCol}-note` || String(key).startsWith(`${oldCol}-`)) {
+        newKey = `${newCol}${String(key).slice(oldCol.length)}`
+        break
+      }
+    }
+    remapped[newKey] = value
+  })
+  return remapped
+}
+
+const parseSheetDate = (value) => {
+  if (!value) return null
+  if (dayjs.isDayjs(value)) return value.isValid() ? value : null
+  const parsed = dayjs(value, 'DD/MM')
+  if (!parsed.isValid()) return null
+  if (parsed.diff(dayjs(), 'day') > 45) return parsed.subtract(1, 'year')
+  return parsed
+}
 
 const FETSheet = ({
   fetFormData,
@@ -17,6 +57,7 @@ const FETSheet = ({
   canUpdate,
   medicationOptions,
   allBillTypeValues,
+  onPersistStartDate,
 }) => {
   const dispatch = useDispatch()
   // Define medications from the image
@@ -63,6 +104,31 @@ const FETSheet = ({
     }))
   }, [fetTemplate, setFETTemplate])
 
+  const handleDay1DateChange = useCallback(
+    (newValue) => {
+      const start = parseSheetDate(newValue)
+      const oldCols = fetTemplate?.columns
+      if (!start || !Array.isArray(oldCols) || oldCols.length === 0) return
+
+      const newCols = oldCols.map((_, index) =>
+        start.add(index, 'day').format('DD/MM'),
+      )
+      if (oldCols.join('|') === newCols.join('|')) return
+
+      if (onPersistStartDate) {
+        onPersistStartDate(start.format('YYYY-MM-DD'))
+        return
+      }
+
+      setFETFormData((prev) => remapSheetKeysByColumns(prev, oldCols, newCols))
+      setFETTemplate((prev) => ({
+        ...(prev || {}),
+        columns: newCols,
+      }))
+    },
+    [fetTemplate?.columns, onPersistStartDate, setFETFormData, setFETTemplate],
+  )
+
   return (
     <div className="w-full p-4">
       {/* Header Section */}
@@ -75,7 +141,22 @@ const FETSheet = ({
         </IconButton>
       </div> */}
       {/* Action Buttons */}
-      <div className="flex justify-end p-3">
+      <div className="flex justify-between items-end p-3 gap-3">
+        {canUpdate && (
+          <DatePicker
+            label="FET start date"
+            value={parseSheetDate(fetTemplate?.columns?.[0])}
+            format="DD/MM/YYYY"
+            onChange={handleDay1DateChange}
+            maxDate={dayjs()}
+            slotProps={{
+              textField: {
+                size: 'small',
+                title: 'Change FET start date',
+              },
+            }}
+          />
+        )}
         {canUpdate && (
           <div className="flex gap-2">
             <Button
